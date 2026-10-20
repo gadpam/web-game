@@ -40,6 +40,12 @@ import {
   getDidacticCycleStepForState,
   TECH_MAP_STAGES,
 } from '../game/techMap';
+import {
+  HOMEWORK_SANDBOX_TASKS,
+  POLYGON_TASKS,
+  verifyCSharpPolygonTask,
+  verifyHomeworkSubmission,
+} from '../game/csharpVerifier';
 
 describe('АПТАЙМ · Ночная смена — Ядро и Регламент (Документы 00–11)', () => {
   it('содержит все 11 документов комплекта «Аптайм» (от 00 до 11)', () => {
@@ -649,5 +655,38 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
     const ctx2 = getDidacticContextForState(b2);
     expect(ctx2.contextTitle).toContain('Бой 2 «Порядок»');
     expect(ctx2.nameText).toContain('CS0160');
+  });
+
+  it('проверяет интерактивный C#-полигон (4 рубежа, диагностика CS0160 и CA2200) и автопроверку ДЗ 3 уровней (Док. 07, 09)', () => {
+    expect(POLYGON_TASKS).toHaveLength(4);
+
+    // 1. Все 4 уязвимых шаблона не проходят верификацию, а все 4 эталонных патча — проходят
+    for (const task of POLYGON_TASKS) {
+      const brokenRes = verifyCSharpPolygonTask(task.slot, task.brokenCode);
+      expect(brokenRes.passed).toBe(false);
+
+      const solvedRes = verifyCSharpPolygonTask(task.slot, task.solutionCode);
+      expect(solvedRes.passed).toBe(true);
+      expect(solvedRes.compilerDiagnostics).toHaveLength(0);
+    }
+
+    // 2. Диагностика CS0160 на Рубеже #2 и CA2200 на Рубеже #4
+    const slot2Broken = verifyCSharpPolygonTask(2, POLYGON_TASKS[1].brokenCode);
+    expect(slot2Broken.compilerDiagnostics.some((d) => d.code === 'CS0160')).toBe(
+      true
+    );
+
+    const slot4Broken = verifyCSharpPolygonTask(4, POLYGON_TASKS[3].brokenCode);
+    expect(slot4Broken.compilerDiagnostics.some((d) => d.code === 'CA2200')).toBe(
+      true
+    );
+
+    // 3. Автопроверка 3 уровней домашнего задания (09:15)
+    for (const hw of HOMEWORK_SANDBOX_TASKS) {
+      expect(verifyHomeworkSubmission(hw.id, hw.starterCode).passed).toBe(false);
+      expect(verifyHomeworkSubmission(hw.id, hw.sampleSolutionCode).passed).toBe(
+        true
+      );
+    }
   });
 });

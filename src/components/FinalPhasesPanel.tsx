@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 import { PATCH_SLOTS, WORLD_PRESETS } from '../game/constants';
+import {
+  HOMEWORK_SANDBOX_TASKS,
+  HomeworkLevelId,
+  verifyHomeworkSubmission,
+} from '../game/csharpVerifier';
 import { getUnlockedShieldCount, isShieldComplete } from '../game/engine';
 import { GameAction } from '../game/reducer';
 import { BrigadeId, ScreenView, SessionState } from '../types/game';
@@ -26,6 +31,15 @@ export const FinalPhasesPanel: React.FC<FinalPhasesPanelProps> = ({
     advanced: 8,
     engineering: 3,
   });
+  const [activeHwLevel, setActiveHwLevel] =
+    useState<HomeworkLevelId>('mandatory');
+  const [hwCodeByLevel, setHwCodeByLevel] = useState<
+    Record<HomeworkLevelId, string>
+  >(() => ({
+    mandatory: HOMEWORK_SANDBOX_TASKS[0].starterCode,
+    advanced: HOMEWORK_SANDBOX_TASKS[1].starterCode,
+    engineering: HOMEWORK_SANDBOX_TASKS[2].starterCode,
+  }));
 
   const shieldUnlockedCount = getUnlockedShieldCount(state);
   const shieldReady = isShieldComplete(state);
@@ -638,28 +652,309 @@ export const FinalPhasesPanel: React.FC<FinalPhasesPanelProps> = ({
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  gap: '6px',
+                  flexWrap: 'wrap',
                 }}
               >
                 <span className="mono" style={{ fontSize: '14px' }}>
                   Выбрали в группе: <strong>{hwPicks[card.id]} чел.</strong>
                 </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setHwPicks((prev) => ({
-                      ...prev,
-                      [card.id]: (prev[card.id] || 0) + 1,
-                    }))
-                  }
-                  className="instrument-btn btn-action"
-                >
-                  + Выбрать уровень
-                </button>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setActiveHwLevel(card.id as HomeworkLevelId)
+                    }
+                    className={`instrument-btn ${
+                      activeHwLevel === card.id ? 'btn-stable' : ''
+                    }`}
+                    style={{ fontSize: '12px' }}
+                  >
+                    Открыть в C#-песочнице
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveHwLevel(card.id as HomeworkLevelId);
+                      setHwPicks((prev) => ({
+                        ...prev,
+                        [card.id]: (prev[card.id] || 0) + 1,
+                      }));
+                    }}
+                    className="instrument-btn btn-action"
+                  >
+                    + Выбрать уровень
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Интерактивная C#-песочница и автопроверка домашнего задания 3 уровней */}
+      {(() => {
+        const hwSpec =
+          HOMEWORK_SANDBOX_TASKS.find((t) => t.id === activeHwLevel) ||
+          HOMEWORK_SANDBOX_TASKS[0];
+        const currentHwCode = hwCodeByLevel[activeHwLevel];
+        const hwRes = verifyHomeworkSubmission(activeHwLevel, currentHwCode);
+
+        return (
+          <div
+            className="material-armor screw-corners"
+            style={{
+              padding: '16px 18px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '12px',
+              borderLeft: `4px solid ${
+                hwRes.passed ? 'var(--color-stable)' : 'var(--color-warning)'
+              }`,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: '12px',
+                    color: 'var(--color-warning)',
+                    fontWeight: 800,
+                  }}
+                >
+                  ЛАБОРАТОРИЯ АВТОПРОВЕРКИ ДЗ · {hwSpec.levelTitle} ({hwSpec.gradeLabel})
+                </div>
+                <div style={{ fontSize: '16px', fontWeight: 900 }}>
+                  {hwSpec.title}
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                  {hwSpec.taskDescription}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {HOMEWORK_SANDBOX_TASKS.map((t) => {
+                  const isOk = verifyHomeworkSubmission(
+                    t.id,
+                    hwCodeByLevel[t.id]
+                  ).passed;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setActiveHwLevel(t.id)}
+                      className={`instrument-btn ${
+                        activeHwLevel === t.id ? 'btn-action' : ''
+                      }`}
+                      style={{ fontSize: '12px', padding: '5px 10px' }}
+                    >
+                      {t.levelTitle.split('·')[0].trim()} {isOk ? '✓' : '•'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1.15fr 1fr',
+                gap: '12px',
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span className="mono" style={{ fontSize: '12px', fontWeight: 800 }}>
+                    РЕДАКТОР РЕШЕНИЯ C# ({hwSpec.id.toUpperCase()}.CS)
+                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHwCodeByLevel((prev) => ({
+                          ...prev,
+                          [activeHwLevel]: hwSpec.sampleSolutionCode,
+                        }))
+                      }
+                      className="instrument-btn btn-stable"
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
+                    >
+                      Загрузить образец решения
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setHwCodeByLevel((prev) => ({
+                          ...prev,
+                          [activeHwLevel]: hwSpec.starterCode,
+                        }))
+                      }
+                      className="instrument-btn"
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
+                    >
+                      Сбросить шаблон
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  value={currentHwCode}
+                  onChange={(e) =>
+                    setHwCodeByLevel((prev) => ({
+                      ...prev,
+                      [activeHwLevel]: e.target.value,
+                    }))
+                  }
+                  spellCheck={false}
+                  className="mono"
+                  rows={12}
+                  style={{
+                    width: '100%',
+                    background: '#090c10',
+                    color: '#e6edf3',
+                    border: `1px solid ${
+                      hwRes.passed
+                        ? 'var(--color-stable)'
+                        : 'var(--border-metal)'
+                    }`,
+                    borderRadius: '3px',
+                    padding: '10px 12px',
+                    fontSize: '12.5px',
+                    lineHeight: 1.45,
+                    resize: 'vertical',
+                  }}
+                />
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '10px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                  }}
+                >
+                  <div style={{ fontSize: '12px', fontWeight: 800 }}>
+                    ЧЕК-ЛИСТ АВТОПРОВЕРКИ КРИТЕРИЕВ ({hwSpec.gradeLabel})
+                  </div>
+                  {hwRes.checks.map((chk, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: '8px 10px',
+                        background: chk.passed
+                          ? 'rgba(53, 208, 160, 0.12)'
+                          : 'rgba(255, 176, 32, 0.08)',
+                        border: `1px solid ${
+                          chk.passed
+                            ? 'var(--color-stable)'
+                            : 'var(--border-metal)'
+                        }`,
+                        fontSize: '12px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontWeight: 800,
+                        }}
+                      >
+                        <span>
+                          {idx + 1}. {chk.label}
+                        </span>
+                        <span
+                          className="mono"
+                          style={{
+                            color: chk.passed
+                              ? 'var(--color-stable)'
+                              : 'var(--color-warning)',
+                          }}
+                        >
+                          {chk.passed ? '✓ ЗАЧТЕНО' : 'ОЖИДАЕТ'}
+                        </span>
+                      </div>
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: '11.5px',
+                          color: 'var(--text-secondary)',
+                          marginTop: '3px',
+                        }}
+                      >
+                        {chk.detail}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    background: 'rgba(0,0,0,0.42)',
+                    border: '1px solid var(--border-metal)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-caption)' }}>
+                      КОД КВИТАНЦИИ ПРОВЕРКИ:
+                    </div>
+                    <div
+                      className="mono"
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: 900,
+                        color: hwRes.passed
+                          ? 'var(--color-stable)'
+                          : 'var(--color-warning)',
+                      }}
+                    >
+                      {hwRes.certificateCode} · PIN {state.code}
+                    </div>
+                  </div>
+                  <span
+                    className={`heavy-stamp ${
+                      hwRes.passed ? 'stamp-repelled' : 'stamp-probed'
+                    }`}
+                  >
+                    {hwRes.passed ? 'ЗАЧТЕНО' : 'В РАБОТЕ'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
