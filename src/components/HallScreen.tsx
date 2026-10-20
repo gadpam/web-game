@@ -1,11 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import {
   BATTLE_TACTS,
-  KNOWN_EXCEPTION_TYPES,
   PATCH_SLOTS,
   PHASES,
-  POLYGON_FILES,
-  PROLOGUE_LOG_LINES,
   PROLOGUE_MINES,
   PROLOGUE_SECOND_WAVE_LOGS,
   TEACHER_SCRIPT_19,
@@ -13,12 +10,14 @@ import {
 } from '../game/constants';
 import { getUnlockedShieldCount, isShieldComplete } from '../game/engine';
 import { GameAction } from '../game/reducer';
+import { getWorldPolygonFiles, getWorldPrologueLogs } from '../game/worldPolygons';
 import {
   BrigadeId,
   PolygonFileId,
   ScreenView,
   SessionState,
 } from '../types/game';
+import { PracticeWorkbench } from './PracticeWorkbench';
 
 interface HallScreenProps {
   state: SessionState;
@@ -45,16 +44,18 @@ export const HallScreen: React.FC<HallScreenProps> = ({
   const activeTactMeta =
     BATTLE_TACTS.find((t) => t.id === activeBattle.tact) || BATTLE_TACTS[0];
   const worldMeta = WORLD_PRESETS[state.world];
+  const worldPolygonFiles = getWorldPolygonFiles(state.world);
+  const worldPrologueLogs = getWorldPrologueLogs(state.world);
   const shieldUnlockedCount = getUnlockedShieldCount(state);
   const shieldReady = isShieldComplete(state);
 
   const isPrologue = state.phase.startsWith('prologue_');
+  const isPracticePhase = state.phase === 'practice';
   const isQueueBoardPhase =
     state.phase === 'start_0900' ||
     state.phase === 'closed' ||
     state.phase === 'homework';
 
-  // Генерируем массив из 1 240 клеток для табло старта в 09:00 (4 сектора по 310 клеток на 4 волны)
   const queueCells = useMemo(() => {
     const total = 1240;
     const cells: ('empty' | 'issued' | 'hole' | 'mine')[] = new Array(total).fill(
@@ -65,7 +66,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
       return cells;
     }
 
-    // Каждая волна отвечает за сектор из 310 человек (4 * 310 = 1240)
     state.waves.forEach((wave, waveIdx) => {
       if (wave.status === 'ожидание') return;
       const startIdx = waveIdx * 310;
@@ -76,7 +76,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
           i >= startIdx + 140 &&
           i < startIdx + 170
         ) {
-          // Наглядная дыра ровно в 30 клеток (30 человек без билета)
           cells[i] = 'hole';
         } else {
           cells[i] = 'issued';
@@ -87,7 +86,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
     return cells;
   }, [state.queue.started, state.phase, state.waves]);
 
-  const currentPolygonSpec = POLYGON_FILES[state.selectedPolygonFile];
+  const currentPolygonSpec = worldPolygonFiles[state.selectedPolygonFile];
 
   const sceneNumber =
     state.phase === 'prologue_1'
@@ -104,6 +103,45 @@ export const HallScreen: React.FC<HallScreenProps> = ({
 
   return (
     <div>
+      {/* Сигнал Стоп-крана Арбитра на спорной карте (Документ 10, п. 7) */}
+      {activeBattle.arbiterStopActive && (
+        <div
+          className="material-armor no-print"
+          style={{
+            margin: '10px 16px 0 16px',
+            padding: '12px 18px',
+            borderLeft: '6px solid var(--color-warning)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px',
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: '18px',
+                fontWeight: 900,
+                color: 'var(--color-warning)',
+              }}
+            >
+              СТОП-КРАН АРБИТРА ({activeBattle.arbiter}) · БОЙ ПРИОСТАНОВЛЕН НА СПОРНОЙ КАРТЕ
+            </div>
+            <div className="mono" style={{ fontSize: '14px' }}>
+              Причина: {activeBattle.arbiterStopReason}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'TOGGLE_ARBITER_STOP' })}
+            className="instrument-btn btn-stable"
+          >
+            Снять стоп-кран и продолжить бой
+          </button>
+        </div>
+      )}
+
       {/* Основная сцена зала: 62% слева (монитор) + 38% справа (приборная панель) */}
       <div className="hall-layout">
         {/* ================= ЛЕВАЯ ЗОНА (~62%): МОНИТОР СЦЕНЫ ================= */}
@@ -139,7 +177,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                   fontWeight: 700,
                 }}
               >
-                МОНИТОР ДИСПЕТЧЕРСКОЙ · РЕЖИМ: {state.mode} · КОД ПАРТИИ:{' '}
+                МОНИТОР · {worldMeta.serviceName.toUpperCase()} · РЕЖИМ: {state.mode} · КОД:{' '}
                 <span className="mono" style={{ color: 'var(--color-warning)' }}>
                   {state.code}
                 </span>
@@ -156,12 +194,12 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               </h1>
             </div>
 
-            {/* Быстрый переход по 4 сценам завязки / полигону / табло 09:00 */}
+            {/* Быстрый переход по 4 сценам завязки / боям / практике / табло 09:00 */}
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'SET_PHASE', phase: 'prologue_1' })}
-                className={`instrument-btn ${ isPrologue ? 'btn-action' : '' }`}
+                className={`instrument-btn ${isPrologue ? 'btn-action' : ''}`}
               >
                 03:00 Завязка
               </button>
@@ -182,6 +220,15 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                   Бой {bNum}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_PHASE', phase: 'practice' })}
+                className={`instrument-btn ${
+                  isPracticePhase ? 'btn-action' : ''
+                }`}
+              >
+                08:05 Практика
+              </button>
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'SET_PHASE', phase: 'five_min' })}
@@ -232,10 +279,9 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 ))}
               </div>
 
-              {/* СЦЕНА 1: ВХОД (Лог вторжения + тест 10 секунд + голосование) */}
+              {/* СЦЕНА 1: ВХОД */}
               {state.phase === 'prologue_1' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {/* Плашка теста «10 секунд» */}
                   <div
                     style={{
                       display: 'grid',
@@ -310,7 +356,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     </div>
                   </div>
 
-                  {/* Дословный лог из раздела 11 Документа 04 */}
                   <div
                     style={{
                       background: 'rgba(0,0,0,0.42)',
@@ -328,9 +373,9 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                         letterSpacing: '0.08em',
                       }}
                     >
-                      ЛЕНТА ДИСПЕТЧЕРСКОЙ · СЕРВИС «ПАРТЕР»
+                      ЛЕНТА ДИСПЕТЧЕРСКОЙ · {worldMeta.serviceName.toUpperCase()}
                     </div>
-                    {PROLOGUE_LOG_LINES.map((item, idx) => (
+                    {worldPrologueLogs.map((item, idx) => (
                       <div
                         key={idx}
                         className="code-line-row"
@@ -360,11 +405,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     ))}
                   </div>
 
-                  {/* Опрос клиентов: «Что произошло?» */}
-                  <div
-                    className="material-paper"
-                    style={{ padding: '14px 16px' }}
-                  >
+                  <div className="material-paper" style={{ padding: '14px 16px' }}>
                     <div
                       style={{
                         display: 'flex',
@@ -446,7 +487,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               )}
 
-              {/* СЦЕНА 2: ВСКРЫТИЕ (Падение пакета + 4 мины + Иерархия Exception -> Правило Щита №1) */}
+              {/* СЦЕНА 2: ВСКРЫТИЕ */}
               {state.phase === 'prologue_2' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div
@@ -527,7 +568,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     </div>
                   )}
 
-                  {/* Таблица 4 мин для сопоставления */}
                   <div
                     style={{
                       display: 'grid',
@@ -604,11 +644,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     })}
                   </div>
 
-                  {/* Дерево иерархии исключений */}
-                  <div
-                    className="material-paper"
-                    style={{ padding: '12px 16px' }}
-                  >
+                  <div className="material-paper" style={{ padding: '12px 16px' }}>
                     <div
                       style={{
                         fontSize: '13px',
@@ -659,7 +695,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               )}
 
-              {/* СЦЕНА 3: ОТБИТО (Сборка механизма TRY · CATCH · FINALLY + штамп ОТБИТО) */}
+              {/* СЦЕНА 3: ОТБИТО */}
               {state.phase === 'prologue_3' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div
@@ -816,7 +852,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               )}
 
-              {/* СЦЕНА 4: ПРОДОЛЖЕНИЕ (Лог оживает сам -> АТАКИ ПРОДОЛЖАТСЯ) */}
+              {/* СЦЕНА 4: ПРОДОЛЖЕНИЕ */}
               {state.phase === 'prologue_4' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   <div
@@ -854,7 +890,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     ))}
                   </div>
 
-                  {/* Крупный плакат во всю ширину ленты: АТАКИ ПРОДОЛЖАТСЯ */}
                   <div
                     className="material-armor"
                     style={{
@@ -925,7 +960,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               )}
 
-              {/* Дословный суфлёр ведущего для текущей сцены завязки */}
+              {/* Дословный суфлёр ведущего */}
               <div
                 style={{
                   padding: '10px 14px',
@@ -959,13 +994,17 @@ export const HallScreen: React.FC<HallScreenProps> = ({
             </div>
           )}
 
-          {/* ================= ФАЗА БОЁВ 1–4, ЗАТИШЬЯ, ПРАКТИКИ, 5 МИНУТ ДО: ПОЛИГОН КОДА ================= */}
-          {!isPrologue && !isQueueBoardPhase && (
+          {/* ================= ФАЗА 08:05 ПРАКТИКА: КОНСТРУКТОР ПОЛНОГО ПАТЧА ================= */}
+          {isPracticePhase && (
+            <PracticeWorkbench state={state} dispatch={dispatch} />
+          )}
+
+          {/* ================= ФАЗА БОЁВ 1–4, ЗАТИШЬЯ, 5 МИНУТ ДО: ПОЛИГОН КОДА ================= */}
+          {!isPrologue && !isPracticePhase && !isQueueBoardPhase && (
             <div
               className="gesture-plate-rise"
               style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}
             >
-              {/* Если фаза «Затишье» (06:00) — показываем диегетическую плашку */}
               {state.phase === 'lull' && (
                 <div
                   className="material-paper"
@@ -984,7 +1023,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               )}
 
-              {/* Вкладки 5 файлов полигона «Партер» */}
+              {/* Вкладки 5 файлов полигона */}
               <div
                 style={{
                   display: 'flex',
@@ -995,8 +1034,8 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 }}
               >
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(Object.keys(POLYGON_FILES) as PolygonFileId[]).map((fileId) => {
-                    const spec = POLYGON_FILES[fileId];
+                  {(Object.keys(worldPolygonFiles) as PolygonFileId[]).map((fileId) => {
+                    const spec = worldPolygonFiles[fileId];
                     const active = state.selectedPolygonFile === fileId;
                     return (
                       <button
@@ -1031,7 +1070,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </span>
               </div>
 
-              {/* Монитор кода с крупными номерами строк (21px+) и пометками человека */}
+              {/* Монитор кода */}
               <div
                 style={{
                   background: 'rgba(0, 0, 0, 0.45)',
@@ -1109,7 +1148,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                   }}
                 >
                   <div style={{ fontSize: '14px', fontWeight: 800 }}>
-                    СЛОТЫ ПАТЧЕЙ ПОЛИГОНА «ПАРТЕР» (КЛАВИШИ 1–4) · АКТИВНЫЙ БОЙ:{' '}
+                    СЛОТЫ ПАТЧЕЙ ПОЛИГОНА (КЛАВИШИ 1–4) · АКТИВНЫЙ БОЙ:{' '}
                     {activeBattle.number} «{activeBattle.codeName}»
                   </div>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -1200,7 +1239,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               </div>
 
-              {/* Результат Живого Запуска с тяжёлым штампом ПРОБИЛА / ОТБИТА */}
               {activeBattle.lastRun && (
                 <div
                   className="material-paper gesture-card-drop"
@@ -1282,7 +1320,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               className="gesture-plate-rise"
               style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}
             >
-              {/* Верхняя сводка старта */}
               <div
                 style={{
                   display: 'flex',
@@ -1316,7 +1353,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                           : 'var(--text-main)',
                     }}
                   >
-                    БИЛЕТОВ ВЫДАНО:{' '}
+                    {worldMeta.unitLabel.toUpperCase()}:{' '}
                     {state.queue.started ? state.queue.issued : 0} ИЗ {state.queue.total}
                   </div>
                   {state.queue.lossReasons.length > 0 && (
@@ -1350,11 +1387,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     onClick={() => dispatch({ type: 'TRIGGER_START_0900' })}
                     className="instrument-btn btn-stable"
                     style={{ fontSize: '16px', padding: '10px 20px' }}
-                    title={
-                      shieldReady
-                        ? 'Запустить 4 волны старта в 09:00'
-                        : 'Кнопка СТАРТ заблокирована, пока не собраны все 6 правил щита'
-                    }
                   >
                     {shieldReady
                       ? 'СТАРТ 09:00 (Запустить 4 волны)'
@@ -1379,7 +1411,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               </div>
 
-              {/* 4 волны обороны (Выбор слотов патчей бригадами и арбитром) */}
               <div
                 style={{
                   display: 'grid',
@@ -1473,12 +1504,8 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 })}
               </div>
 
-              {/* Полоса автономного режима (если включён режим АВТОНОМНЫЙ или РУЧНОЙ) */}
               {state.mode !== 'ПОЛНЫЙ' && (
-                <div
-                  className="material-paper"
-                  style={{ padding: '10px 14px' }}
-                >
+                <div className="material-paper" style={{ padding: '10px 14px' }}>
                   <div style={{ fontSize: '13px', fontWeight: 700 }}>
                     ПОЛОСА ОЧЕРЕДИ ({state.mode} РЕЖИМ):{' '}
                     {state.queue.started ? state.queue.issued : 0} / 1240
@@ -1507,7 +1534,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               )}
 
-              {/* ТАБЛО ИЗ 1 240 КЛЕТОК (40 × 31 = 1 240 человек) */}
               <div>
                 <div
                   style={{
@@ -1536,13 +1562,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                           : status === 'hole'
                           ? 'cell-hole'
                           : ''
-                      }`}
-                      title={`Место очереди #${idx + 1}: ${
-                        status === 'issued'
-                          ? 'Билет выдан'
-                          : status === 'hole'
-                          ? 'Потеряно из-за пробитой волны'
-                          : 'Ожидание старта'
                       }`}
                     />
                   ))}
@@ -1582,7 +1601,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     gap: '8px',
                   }}
                 >
-                  {/* Латунная табличка с именем и клеймом формы */}
                   <div
                     style={{
                       display: 'flex',
@@ -1597,7 +1615,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     </span>
                   </div>
 
-                  {/* Крупная цифра очков (56px) + лампы жизни */}
                   <div
                     style={{
                       display: 'flex',
@@ -1624,7 +1641,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                     </div>
                   </div>
 
-                  {/* Чип статуса роли в текущем бою (Цвет = состояние/роль, не команда) */}
                   <div
                     style={{
                       display: 'flex',
@@ -1664,7 +1680,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
             })}
           </div>
 
-          {/* 2. НАРЯД-ЗАДАНИЕ (Бумага, матричный заголовок "ВЫБЕРИ ПАТЧ", моно-строка 21px, награда 42px) */}
+          {/* 2. НАРЯД-ЗАДАНИЕ */}
           <div className="material-paper" style={{ padding: '14px 16px' }}>
             <div
               style={{
@@ -1692,15 +1708,12 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               </span>
             </div>
 
-            {/* Единственная матричная строка по разделу 4 Документа 08 */}
             <div className="dot-matrix-cta">ВЫБЕРИ ПАТЧ</div>
 
-            {/* Моноширинная строка атаки 21px */}
             <div className="attack-line-21" style={{ marginTop: '8px' }}>
               {activeBattle.attackLineCode}
             </div>
 
-            {/* Крупная награда 42px */}
             <div
               style={{
                 display: 'flex',
@@ -1723,7 +1736,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               </div>
             </div>
 
-            {/* Подвал со сроком и ролью */}
             <div
               className="mono"
               style={{
@@ -1744,7 +1756,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
             </div>
           </div>
 
-          {/* 3. ЩИТ СМЕНЫ (6 ПРАВИЛ — БЛОКИРУЕТ СТАРТ В 09:00) */}
+          {/* 3. ЩИТ СМЕНЫ (6 ПРАВИЛ) */}
           <div className="material-armor screw-corners" style={{ padding: '12px 14px' }}>
             <div
               style={{
@@ -1823,7 +1835,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
             </div>
           </div>
 
-          {/* 4. БЛОК ВРЕМЕНИ БВ-1 (Семисегментные цифры под стеклом, ролик фазы, красная зона, колпак Сброса) */}
+          {/* 4. БЛОК ВРЕМЕНИ БВ-1 */}
           <div className="material-armor screw-corners" style={{ padding: '14px' }}>
             <div
               style={{
@@ -1851,7 +1863,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               </span>
             </div>
 
-            {/* Два семисегментных окна: Часы смены (03:00 -> 09:00) и Таймер такта */}
             <div
               style={{
                 display: 'grid',
@@ -1887,7 +1898,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               </div>
             </div>
 
-            {/* Шкала с красной зоной */}
             <div
               style={{
                 height: '8px',
@@ -1919,7 +1929,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               />
             </div>
 
-            {/* Ролик такта боя (6 тактов восемь минут) */}
             <div
               style={{
                 marginTop: '10px',
@@ -1953,7 +1962,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               </div>
             </div>
 
-            {/* Аппаратные клавиши БВ-1: Пуск/Пауза, +30 с, След. такт, След. фаза, Сброс под колпаком */}
             <div
               style={{
                 display: 'flex',
@@ -1993,7 +2001,6 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 След. фаза →
               </button>
 
-              {/* Кнопка Сброс под защитным колпаком */}
               {!safetyCoverOpen ? (
                 <button
                   type="button"
@@ -2023,7 +2030,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
         </aside>
       </div>
 
-      {/* ================= НИЖНЯЯ ЛЕНТА СОБЫТИЙ: КАРТЫ, ЗАПУСКИ, ВЕРДИКТЫ ================= */}
+      {/* ================= НИЖНЯЯ ЛЕНТА СОБЫТИЙ ================= */}
       <footer
         className="material-armor no-print"
         style={{
@@ -2088,8 +2095,8 @@ export const HallScreen: React.FC<HallScreenProps> = ({
           className="mono"
           style={{ fontSize: '13px', color: 'var(--text-caption)' }}
         >
-          Горячие клавиши: [Пробел] таймер · [1–4] слот патча · [Enter] запуск · [Y/N]
-          вердикт · [Q] пропуск · [R] такт
+          Горячие клавиши: [Пробел] таймер · [1–4] слот · [Enter] запуск · [Y/N]
+          вердикт · [Q] пропуск · [R] такт · [Esc] меню
         </div>
       </footer>
     </div>

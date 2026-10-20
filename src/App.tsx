@@ -10,6 +10,7 @@ import { createInitialSession } from './game/engine';
 import { GameAction, gameReducer } from './game/reducer';
 import { instrumentAudio } from './game/sound';
 import {
+  AppMode,
   BrigadeId,
   MemberRole,
   ScreenView,
@@ -18,89 +19,97 @@ import {
 } from './types/game';
 
 export const App: React.FC = () => {
-  const [state, setState] = useState<SessionState>(() => {
-    const savedTheme = (localStorage.getItem('uptime_theme') as ThemeMode) || 'night';
-    const initial = createInitialSession('4826');
-    return { ...initial, theme: savedTheme };
-  });
-
+  const [state, setState] = useState<SessionState>(() =>
+    createInitialSession('4826')
+  );
   const [activeScreen, setActiveScreen] = useState<ScreenView>('hall');
   const [activeBrigade, setActiveBrigade] = useState<BrigadeId>('TRY');
-  const [activeRole, setActiveRole] = useState<MemberRole>('картёр');
+  const [activeRole, setActiveRole] = useState<MemberRole>('аналитик');
+  const [loginOpen, setLoginOpen] = useState<boolean>(false);
+  const [emergencyOpen, setEmergencyOpen] = useState<boolean>(false);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [loginModalOpen, setLoginModalOpen] = useState<boolean>(false);
-  const [emergencyModalOpen, setEmergencyModalOpen] = useState<boolean>(false);
+  const [projectorCleanMode, setProjectorCleanMode] = useState<boolean>(false);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const modeRef = useRef(state.mode);
-  modeRef.current = state.mode;
-  const lastGestureTsRef = useRef<number>(0);
+  const localModeRef = useRef<AppMode>(state.mode);
+  localModeRef.current = state.mode;
 
-  // Синхронизация темы оформления с корневым HTML-атрибутом и localStorage
+  // Синхронизация атрибута темы на корневом документе
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', state.theme);
-    try {
-      localStorage.setItem('uptime_theme', state.theme);
-    } catch {
-      // ignore storage errors
-    }
   }, [state.theme]);
 
-  // Звуковой отклик на 4 физических жеста из Документа 08
-  useEffect(() => {
-    if (!state.lastGesture) return;
-    if (state.lastGesture.timestamp === lastGestureTsRef.current) return;
-    lastGestureTsRef.current = state.lastGesture.timestamp;
-
-    const g = state.lastGesture;
-    if (g.type === 'card-drop') {
+  // Отправка действия: со звуковым откликом + отправкой на сервер (если не АВТОНОМНЫЙ)
+  const dispatch = useCallback((action: GameAction) => {
+    if (action.type === 'SUBMIT_CARD') {
       instrumentAudio.playCardDrop();
-    } else if (g.type === 'verdict-stamp') {
-      instrumentAudio.playStampImpact(g.outcome || 'ОТБИТА');
-    } else if (g.type === 'lamp-burn') {
-      instrumentAudio.playLampBurn();
-    } else if (g.type === 'plate-rise') {
+    } else if (action.type === 'SUBMIT_VERDICT') {
+      if (action.result === 'ПРОБИЛА') instrumentAudio.playStampImpact('ПРОБИЛА');
+      else if (action.result === 'ОТБИТА') instrumentAudio.playStampImpact('ОТБИТА');
+      else instrumentAudio.playRelayClick();
+    } else if (
+      action.type === 'SET_PHASE' ||
+      action.type === 'NEXT_PHASE' ||
+      action.type === 'PREV_PHASE'
+    ) {
       instrumentAudio.playPlateRise();
+    } else if (action.type !== 'TICK_SECOND') {
+      instrumentAudio.playRelayClick();
     }
-  }, [state.lastGesture]);
 
-  // Подключение к WebSocket серверу смены (/ws) — относительный URL для работы в любом окружении
+    setState((prev) => gameReducer(prev, action));
+
+    if (
+      localModeRef.current !== 'АВТОНОМНЫЙ' &&
+      wsRef.current &&
+      wsRef.current.readyState === WebSocket.OPEN
+    ) {
+      wsRef.current.send(JSON.stringify(action));
+    }
+  }, []);
+
+  // Подключение к серверу партии по WebSocket с автоматическим переподключением
   useEffect(() => {
-    let closedByUnmount = false;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    if (state.mode === 'АВТОНОМНЫЙ') {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setWsConnected(false);
+      return;
+    }
 
-    const connectWs = () => {
-      if (closedByUnmount) return;
+    let closed = false;
+    let reconnectTimer: number | undefined;
+
+    const connect = () => {
+      if (closed) return;
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
       try {
-        const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${proto}//${window.location.host}/ws`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
-          if (!closedByUnmount) setWsConnected(true);
+          if (!closed) setWsConnected(true);
         };
 
         ws.onmessage = (event) => {
-          if (modeRef.current === 'АВТОНОМНЫЙ') return;
           try {
-            const msg = JSON.parse(String(event.data));
-            if (msg && msg.type === 'STATE_SYNC' && msg.state) {
-              setState((prev) => ({
-                ...msg.state,
-                theme: prev.theme,
-              }));
+            const msg = JSON.parse(event.data);
+            if (msg?.type === 'STATE_SYNC' && msg.state) {
+              setState(msg.state);
             }
           } catch {
-            // ignore malformed message
+            // Игнорируем некорректные пакеты
           }
         };
 
         ws.onclose = () => {
-          if (!closedByUnmount) {
+          if (!closed) {
             setWsConnected(false);
-            reconnectTimer = setTimeout(connectWs, 2500);
+            reconnectTimer = window.setTimeout(connect, 2500);
           }
         };
 
@@ -112,43 +121,32 @@ export const App: React.FC = () => {
       }
     };
 
-    connectWs();
+    connect();
 
     return () => {
-      closedByUnmount = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (wsRef.current) wsRef.current.close();
-    };
-  }, []);
-
-  // Локальный диспетчер + отправка на сервер
-  const dispatch = useCallback((action: GameAction) => {
-    setState((prev) => gameReducer(prev, action));
-    if (
-      action.type !== 'SET_THEME' &&
-      modeRef.current !== 'АВТОНОМНЫЙ' &&
-      wsRef.current &&
-      wsRef.current.readyState === WebSocket.OPEN
-    ) {
-      wsRef.current.send(JSON.stringify({ type: 'DISPATCH', action }));
-    }
-  }, []);
-
-  // Локальный секундный тик, если режим АВТОНОМНЫЙ или нет связи с сервером
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!wsConnected || state.mode === 'АВТОНОМНЫЙ') {
-        setState((prev) =>
-          prev.timerRunning ? gameReducer(prev, { type: 'TICK_SECOND' }) : prev
-        );
+      closed = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
+    };
+  }, [state.mode]);
+
+  // Локальный тик таймера на случай автономного режима или отсутствия WebSocket
+  useEffect(() => {
+    if (wsConnected && state.mode !== 'АВТОНОМНЫЙ') return;
+    const timer = window.setInterval(() => {
+      setState((prev) =>
+        prev.timerRunning ? gameReducer(prev, { type: 'TICK_SECOND' }) : prev
+      );
     }, 1000);
-    return () => clearInterval(timer);
+    return () => window.clearInterval(timer);
   }, [wsConnected, state.mode]);
 
-  // Горячие клавиши из раздела 8 Документа 06 (ТЗ приложение)
+  // Глобальные горячие клавиши ведущего и арбитра
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       const isInput =
         target &&
@@ -158,8 +156,8 @@ export const App: React.FC = () => {
           target.isContentEditable);
 
       if (e.key === 'Escape') {
-        setLoginModalOpen(false);
-        setEmergencyModalOpen((v) => !v);
+        e.preventDefault();
+        setEmergencyOpen((prev) => !prev);
         return;
       }
 
@@ -167,66 +165,106 @@ export const App: React.FC = () => {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        instrumentAudio.playRelayClick();
         dispatch({ type: 'TOGGLE_TIMER' });
-      } else if (e.key === '1' || e.key === '2' || e.key === '3' || e.key === '4') {
-        const num = Number(e.key) as 1 | 2 | 3 | 4;
-        instrumentAudio.playRelayClick();
-        dispatch({ type: 'TOGGLE_PATCH_SLOT', slot: num });
+      } else if (e.key === '1') {
+        dispatch({ type: 'TOGGLE_PATCH_SLOT', slot: 1 });
+      } else if (e.key === '2') {
+        dispatch({ type: 'TOGGLE_PATCH_SLOT', slot: 2 });
+      } else if (e.key === '3') {
+        dispatch({ type: 'TOGGLE_PATCH_SLOT', slot: 3 });
+      } else if (e.key === '4') {
+        dispatch({ type: 'TOGGLE_PATCH_SLOT', slot: 4 });
       } else if (e.key === 'Enter') {
         e.preventDefault();
         dispatch({ type: 'RUN_POLYGON' });
-      } else if (e.key.toLowerCase() === 'y' || e.key.toLowerCase() === 'н') {
+      } else if (e.key === 'y' || e.key === 'Y' || e.key === 'н' || e.key === 'Н') {
         dispatch({
           type: 'SUBMIT_VERDICT',
           result: 'ПРОБИЛА',
           legalAttackBonus: true,
-          journalLine: 'Вердикт по горячей клавише [Y]: защита пробита',
+          counterHeldBonus: false,
+          journalLine: 'Атака пробила защиту (подтверждено клавишей Y)',
         });
-      } else if (e.key.toLowerCase() === 'n' || e.key.toLowerCase() === 'т') {
+      } else if (e.key === 'n' || e.key === 'N' || e.key === 'т' || e.key === 'Т') {
         dispatch({
           type: 'SUBMIT_VERDICT',
           result: 'ОТБИТА',
           legalAttackBonus: true,
-          journalLine: 'Вердикт по горячей клавише [N]: атака отбита обработчиком',
+          counterHeldBonus: false,
+          journalLine: 'Защита удержала строку (подтверждено клавишей N)',
         });
-      } else if (e.key.toLowerCase() === 'q' || e.key.toLowerCase() === 'й') {
+      } else if (e.key === 'q' || e.key === 'Q' || e.key === 'й' || e.key === 'Й') {
         dispatch({
           type: 'AWARD_MISSED_SPOT',
-          note: 'Арбитр зафиксировал пропуск обеих сторон [Q]',
+          note: 'Арбитр указал на пропуск обеих сторон (+1 очко)',
         });
-      } else if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'к') {
-        instrumentAudio.playRelayClick();
+      } else if (e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') {
         dispatch({ type: 'NEXT_TACT' });
+      } else if (e.key === 's' || e.key === 'S' || e.key === 'ы' || e.key === 'Ы') {
+        dispatch({
+          type: 'TOGGLE_ARBITER_STOP',
+          reason: 'Стоп-кран арбитра на спорной карте (клавиша S)',
+        });
+      } else if (e.key === 'f' || e.key === 'F' || e.key === 'а' || e.key === 'А') {
+        setProjectorCleanMode((prev) => !prev);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
   }, [dispatch]);
 
   const handleToggleSound = () => {
     const next = !soundEnabled;
-    instrumentAudio.enabled = next;
     setSoundEnabled(next);
+    instrumentAudio.enabled = next;
     if (next) instrumentAudio.playRelayClick();
   };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <TopInstrumentBar
-        state={state}
-        activeScreen={activeScreen}
-        setActiveScreen={setActiveScreen}
-        activeBrigade={activeBrigade}
-        activeRole={activeRole}
-        wsConnected={wsConnected}
-        soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
-        onOpenLogin={() => setLoginModalOpen(true)}
-        onOpenEmergency={() => setEmergencyModalOpen(true)}
-        dispatch={dispatch}
-      />
+      {!projectorCleanMode ? (
+        <TopInstrumentBar
+          state={state}
+          activeScreen={activeScreen}
+          onSelectScreen={setActiveScreen}
+          activeBrigade={activeBrigade}
+          activeRole={activeRole}
+          onOpenLogin={() => setLoginOpen(true)}
+          onChangeMode={(mode: AppMode) => dispatch({ type: 'SET_MODE', mode })}
+          onChangeTheme={(theme: ThemeMode) =>
+            dispatch({ type: 'SET_THEME', theme })
+          }
+          onLoadDemoPreset={() => {
+            dispatch({ type: 'LOAD_DEMO_1210' });
+            setActiveScreen('hall');
+          }}
+          onOpenEmergencyMenu={() => setEmergencyOpen(true)}
+          wsConnected={wsConnected}
+          soundEnabled={soundEnabled}
+          onToggleSound={handleToggleSound}
+          onToggleProjectorMode={() => setProjectorCleanMode(true)}
+        />
+      ) : (
+        <div
+          className="no-print"
+          style={{
+            position: 'fixed',
+            top: '8px',
+            right: '12px',
+            zIndex: 50,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setProjectorCleanMode(false)}
+            className="instrument-btn mono"
+            style={{ opacity: 0.78, fontSize: '13px', padding: '4px 10px' }}
+          >
+            Показать верхнюю панель [F]
+          </button>
+        </div>
+      )}
 
       <main style={{ flex: 1 }}>
         {activeScreen === 'hall' && (
@@ -240,11 +278,11 @@ export const App: React.FC = () => {
         {activeScreen === 'brigade' && (
           <BrigadeClient
             state={state}
-            activeBrigade={activeBrigade}
-            setActiveBrigade={setActiveBrigade}
-            activeRole={activeRole}
-            setActiveRole={setActiveRole}
             dispatch={dispatch}
+            activeBrigade={activeBrigade}
+            activeRole={activeRole}
+            onSelectBrigade={setActiveBrigade}
+            onSelectRole={setActiveRole}
           />
         )}
 
@@ -261,60 +299,70 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {loginModalOpen && (
+      {loginOpen && (
         <LoginModal
           state={state}
           activeBrigade={activeBrigade}
           activeRole={activeRole}
-          onApplyIdentity={(b, r, scr) => {
-            setActiveBrigade(b);
-            setActiveRole(r);
-            setActiveScreen(scr);
+          onApplyIdentity={(brigade, role, nextScreen) => {
+            setActiveBrigade(brigade);
+            setActiveRole(role);
+            setActiveScreen(nextScreen);
           }}
-          onClose={() => setLoginModalOpen(false)}
+          onClose={() => setLoginOpen(false)}
           dispatch={dispatch}
         />
       )}
 
-      {/* Аварийное меню смены (по клавише Esc) */}
-      {emergencyModalOpen && (
+      {emergencyOpen && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Аварийное меню переключения режима"
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(2, 6, 12, 0.85)',
+            background: 'rgba(3, 8, 15, 0.85)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
+            zIndex: 110,
             padding: '16px',
           }}
         >
           <div
             className="material-armor screw-corners"
             style={{
-              maxWidth: '520px',
               width: '100%',
-              padding: '22px 26px',
+              maxWidth: '580px',
+              padding: '22px 24px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '12px',
+              gap: '14px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="brass-nameplate">АВАРИЙНОЕ МЕНЮ СМЕНЫ [ESC]</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div>
+                <div
+                  style={{
+                    fontSize: '13px',
+                    color: 'var(--color-incident)',
+                    fontWeight: 800,
+                  }}
+                >
+                  АВАРИЙНОЕ ПЕРЕКЛЮЧЕНИЕ (ДОКУМЕНТ 06, РАЗДЕЛ 9 · КЛАВИША ESC)
+                </div>
+                <h2 style={{ margin: '4px 0 0 0', fontSize: '22px', fontWeight: 900 }}>
+                  Продолжение смены при сбое сети или проектора
+                </h2>
+              </div>
               <button
                 type="button"
-                onClick={() => setEmergencyModalOpen(false)}
+                onClick={() => setEmergencyOpen(false)}
                 className="instrument-btn"
               >
-                Закрыть
+                Закрыть [Esc]
               </button>
-            </div>
-
-            <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-              Быстрые запасные ходы на случай нехватки времени или отказа сети на
-              конкурсной площадке (Документ 00, п. 10 и Документ 05, п. 8):
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -322,70 +370,61 @@ export const App: React.FC = () => {
                 type="button"
                 onClick={() => {
                   dispatch({ type: 'SET_MODE', mode: 'РУЧНОЙ' });
-                  setEmergencyModalOpen(false);
+                  setEmergencyOpen(false);
                 }}
                 className="instrument-btn btn-warning"
+                style={{ justifyContent: 'space-between', padding: '12px 14px' }}
               >
-                1. Переключить в режим РУЧНОЙ (клиенты подводят — экран ведёт ведущий)
+                <span>
+                  <strong>Упал Wi-Fi в кабинете:</strong> Переключить в «РУЧНОЙ РЕЖИМ»
+                </span>
+                <span className="mono">Карты на бумаге → ввод у ведущего</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   dispatch({ type: 'SET_MODE', mode: 'АВТОНОМНЫЙ' });
-                  setEmergencyModalOpen(false);
-                }}
-                className="instrument-btn btn-warning"
-              >
-                2. Переключить в режим АВТОНОМНЫЙ (работа без сети на одном ПК)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  dispatch({ type: 'UNLOCK_ALL_SHIELD' });
-                  dispatch({ type: 'SET_PHASE', phase: 'five_min' });
-                  setEmergencyModalOpen(false);
+                  setEmergencyOpen(false);
                 }}
                 className="instrument-btn btn-action"
+                style={{ justifyContent: 'space-between', padding: '12px 14px' }}
               >
-                3. Собрать Щит 6/6 и перейти к фазе «08:55 Пять минут до старта»
+                <span>
+                  <strong>Нет локального сервера:</strong> Переключить в «АВТОНОМНЫЙ»
+                </span>
+                <span className="mono">Один ноутбук ведущего + проектор</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
-                  dispatch({ type: 'UNLOCK_ALL_SHIELD' });
-                  dispatch({ type: 'TRIGGER_START_0900' });
-                  setActiveScreen('hall');
-                  setEmergencyModalOpen(false);
+                  dispatch({ type: 'SET_THEME', theme: 'light' });
+                  setEmergencyOpen(false);
                 }}
-                className="instrument-btn btn-stable"
+                className="instrument-btn"
+                style={{ justifyContent: 'space-between', padding: '12px 14px' }}
               >
-                4. Немедленный СТАРТ 09:00 на табло из 1 240 клеток
+                <span>
+                  <strong>Слабый проектор / солнце в окна:</strong> Тема «Светлый прибор»
+                </span>
+                <span className="mono">Высокий контраст</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   dispatch({ type: 'LOAD_DEMO_1210' });
-                  setActiveScreen('materials');
-                  setEmergencyModalOpen(false);
+                  setActiveScreen('hall');
+                  setEmergencyOpen(false);
                 }}
-                className="instrument-btn"
+                className="instrument-btn btn-stable"
+                style={{ justifyContent: 'space-between', padding: '12px 14px' }}
               >
-                5. Открыть готовый Протокол смены (1210 из 1240 билетов)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  dispatch({ type: 'RESET_SESSION' });
-                  setEmergencyModalOpen(false);
-                }}
-                className="instrument-btn btn-incident"
-              >
-                6. Полный сброс партии к 03:00 (Сцена 1 «Вход»)
+                <span>
+                  <strong>Показ комиссии (08:58):</strong> Загрузить пресет 1210 из 1240
+                </span>
+                <span className="mono">TRY 14 · CATCH 12 · FINALLY 11</span>
               </button>
             </div>
           </div>
