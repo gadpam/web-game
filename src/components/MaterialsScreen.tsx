@@ -271,6 +271,15 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
         </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <a
+            href="/api/portable"
+            download="uptime-portable.html"
+            className="instrument-btn btn-action"
+            style={{ textDecoration: 'none' }}
+            title="Скачать автономную однофайловую сборку для запуска с флешки без интернета и без Node.js (Документ 06, п. 10)"
+          >
+            Для флешки (.html)
+          </a>
           <button
             type="button"
             onClick={handleExportMarkdown}

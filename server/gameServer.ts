@@ -1,4 +1,6 @@
+import { existsSync, readFileSync } from 'fs';
 import type { IncomingMessage, Server as HttpServer, ServerResponse } from 'http';
+import { join } from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createInitialSession } from '../src/game/engine';
 import { GameAction, gameReducer } from '../src/game/reducer';
@@ -80,6 +82,29 @@ export function createApiMiddleware(shiftServer: ShiftServerInstance) {
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify(shiftServer.getState()));
+      return;
+    }
+
+    if (url === '/api/portable' && req.method === 'GET') {
+      const portablePath = join(process.cwd(), 'dist', 'uptime-portable.html');
+      if (existsSync(portablePath)) {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader(
+          'Content-Disposition',
+          'attachment; filename="uptime-portable.html"'
+        );
+        res.end(readFileSync(portablePath));
+      } else {
+        res.statusCode = 404;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(
+          JSON.stringify({
+            error:
+              'Портативная сборка dist/uptime-portable.html ещё не создана. Выполните npm run build.',
+          })
+        );
+      }
       return;
     }
 

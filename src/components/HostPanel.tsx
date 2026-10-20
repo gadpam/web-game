@@ -18,9 +18,16 @@ import {
 interface HostPanelProps {
   state: SessionState;
   dispatch: (action: GameAction) => void;
+  onOpenProjectorWindow?: () => void;
+  syncedWindowCount?: number;
 }
 
-export const HostPanel: React.FC<HostPanelProps> = ({ state, dispatch }) => {
+export const HostPanel: React.FC<HostPanelProps> = ({
+  state,
+  dispatch,
+  onOpenProjectorWindow,
+  syncedWindowCount = 1,
+}) => {
   const [scoreReason, setScoreReason] = useState(
     'Ручная корректировка ведущим смены'
   );
@@ -75,6 +82,17 @@ export const HostPanel: React.FC<HostPanelProps> = ({ state, dispatch }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {onOpenProjectorWindow && (
+            <button
+              type="button"
+              onClick={onOpenProjectorWindow}
+              className="instrument-btn btn-action"
+              title="Открыть чистый Экран зала во втором окне браузера для вывода на проектор (синхронизируется через BroadcastChannel даже без сети)"
+            >
+              Открыть окно проектора ↗ (Окон: {syncedWindowCount})
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => dispatch({ type: 'TOGGLE_DIM_SCREENS' })}

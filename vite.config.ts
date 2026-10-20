@@ -31,18 +31,7 @@ export default defineConfig({
     allowedHosts: true,
   },
   build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            return 'vendor';
-          }
-          if (id.includes('kitDocuments')) {
-            return 'kit-docs';
-          }
-          return undefined;
-        },
-      },
-    },
+    chunkSizeWarningLimit: 800,
+    cssCodeSplit: false,
   },
 });

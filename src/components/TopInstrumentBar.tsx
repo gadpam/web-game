@@ -22,9 +22,11 @@ interface TopInstrumentBarProps {
   onLoadDemoPreset: () => void;
   onOpenEmergencyMenu: () => void;
   wsConnected: boolean;
+  syncedWindowCount: number;
   soundEnabled: boolean;
   onToggleSound: () => void;
   onToggleProjectorMode: () => void;
+  onOpenProjectorWindow: () => void;
 }
 
 const SCREEN_TABS: { id: ScreenView; label: string; subtitle: string }[] = [
@@ -47,9 +49,11 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
   onLoadDemoPreset,
   onOpenEmergencyMenu,
   wsConnected,
+  syncedWindowCount,
   soundEnabled,
   onToggleSound,
   onToggleProjectorMode,
+  onOpenProjectorWindow,
 }) => {
   const worldMeta = WORLD_PRESETS[state.world];
   const shieldCount = getUnlockedShieldCount(state);
@@ -69,7 +73,7 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
         gap: '10px',
       }}
     >
-      {/* Левая колодка: шильдик прибора + код партии + статус канала */}
+      {/* Левая колодка: шильдик прибора + код партии + статус канала и окон */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <div
           className="brass-nameplate"
@@ -109,15 +113,19 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
           }}
           title={
             wsConnected
-              ? 'Синхронизация с сервером партии активна'
-              : 'Автономный локальный контур (работает без сети)'
+              ? 'Синхронизация с сервером партии и между окнами активна'
+              : 'Автономный локальный контур (BroadcastChannel + localStorage между окнами без сети)'
           }
         >
           <span
-            className={`fuse-lamp ${wsConnected ? 'lamp-on' : 'lamp-warn'}`}
+            className={`fuse-lamp ${
+              wsConnected || syncedWindowCount > 1 ? 'lamp-on' : 'lamp-warn'
+            }`}
             style={{ width: '8px', height: '8px' }}
           />
           <span>{wsConnected ? 'СЕТЬ ОК' : 'АВТОНОМ'}</span>
+          <span>·</span>
+          <span>ОКОН: {syncedWindowCount}</span>
           <span>·</span>
           <span>ЩИТ {shieldCount}/6</span>
         </div>
@@ -161,7 +169,7 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
         })}
       </nav>
 
-      {/* Правая колодка: Режим (Полный/Ручной/Автономный), Тема, Звук, Проектор, Демо 1210/1240, Esc */}
+      {/* Правая колодка: Режим, Тема, Звук, Проектор [F], Окно проектора ↗, Демо 1210/1240, Esc */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
         <select
           aria-label="Режим работы приложения"
@@ -200,9 +208,18 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
           type="button"
           onClick={onToggleProjectorMode}
           className="instrument-btn"
-          title="Чистый проекторный режим без верхней панели [F]"
+          title="Чистый проекторный режим без верхней панели в текущем окне [F]"
         >
           Проектор [F]
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenProjectorWindow}
+          className="instrument-btn btn-action"
+          title="Открыть второе синхронизированное окно в режиме чистого Экрана зала для вывода на проектор (работает и без сети)"
+        >
+          Окно проектора ↗
         </button>
 
         <button

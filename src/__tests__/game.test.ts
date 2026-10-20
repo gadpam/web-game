@@ -10,6 +10,13 @@ import {
 } from '../game/engine';
 import { KIT_DOCUMENTS } from '../game/kitDocuments';
 import { gameReducer } from '../game/reducer';
+import {
+  acquireOrCheckClockLeader,
+  clearPersistedSessionState,
+  loadPersistedSessionState,
+  parseLaunchParams,
+  persistSessionState,
+} from '../game/syncBus';
 import { getWorldPolygonFiles, getWorldPrologueLogs } from '../game/worldPolygons';
 
 describe('АПТАЙМ · Ночная смена — Ядро и Регламент (Документы 00–11)', () => {
@@ -317,5 +324,70 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
     });
     expect(imported.queue.issued).toBe(1210);
     expect(imported.brigades.TRY.score).toBe(14);
+  });
+
+  it('разбирает параметры запуска #projector и ?screen=... для двухоконного офлайн-режима', () => {
+    const p1 = parseLaunchParams('', '#projector');
+    expect(p1.screen).toBe('hall');
+    expect(p1.projectorClean).toBe(true);
+
+    const p2 = parseLaunchParams('?screen=host', '');
+    expect(p2.screen).toBe('host');
+    expect(p2.projectorClean).toBeUndefined();
+
+    const p3 = parseLaunchParams(
+      '',
+      '#screen=brigade&brigade=CATCH&role=арбитр&projector=1'
+    );
+    expect(p3.screen).toBe('brigade');
+    expect(p3.brigade).toBe('CATCH');
+    expect(p3.role).toBe('арбитр');
+    expect(p3.projectorClean).toBe(true);
+  });
+
+  it('сохраняет состояние в хранилище (защита от F5) и выбирает единственного лидера таймера между окнами', () => {
+    const store = new Map<string, string>();
+    const mockStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    };
+
+    const initial = createInitialSession('4826');
+    const modified = gameReducer(initial, { type: 'LOAD_DEMO_1210' });
+    persistSessionState(modified, mockStorage);
+
+    const restored = loadPersistedSessionState(mockStorage);
+    expect(restored).not.toBeNull();
+    expect(restored?.queue.issued).toBe(1210);
+    expect(restored?.brigades.TRY.score).toBe(14);
+
+    clearPersistedSessionState(mockStorage);
+    expect(loadPersistedSessionState(mockStorage)).toBeNull();
+
+    // Проверка выбора лидера секундного таймера (Clock Leader Election):
+    // 1. Окно проектора открывается первым в t=1000 и берёт лидерство
+    expect(acquireOrCheckClockLeader('win-projector', false, 1000, mockStorage)).toBe(
+      true
+    );
+    // 2. Второе обычное окно в t=1500 не может перехватить таймер (чтобы часы не шли в 2 раза быстрее)
+    expect(acquireOrCheckClockLeader('win-brigade', false, 1500, mockStorage)).toBe(
+      false
+    );
+    // 3. Окно Панели ведущего (isPreferredHost = true) имеет приоритет и забирает тактовый генератор себе
+    expect(acquireOrCheckClockLeader('win-host', true, 1600, mockStorage)).toBe(
+      true
+    );
+    expect(acquireOrCheckClockLeader('win-projector', false, 1700, mockStorage)).toBe(
+      false
+    );
+    // 4. Если окно ведущего закрылось и прошло > 2400 мс (t=5000), окно проектора подхватывает таймер
+    expect(acquireOrCheckClockLeader('win-projector', false, 5000, mockStorage)).toBe(
+      true
+    );
   });
 });

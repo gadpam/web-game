@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArbiterPanel } from './components/ArbiterPanel';
 import { BrigadeClient } from './components/BrigadeClient';
 import { HallScreen } from './components/HallScreen';
@@ -10,6 +10,14 @@ import { createInitialSession } from './game/engine';
 import { GameAction, gameReducer } from './game/reducer';
 import { instrumentAudio } from './game/sound';
 import {
+  acquireOrCheckClockLeader,
+  createCrossWindowSyncBus,
+  CrossWindowSyncBus,
+  loadPersistedSessionState,
+  parseLaunchParams,
+  persistSessionState,
+} from './game/syncBus';
+import {
   AppMode,
   BrigadeId,
   MemberRole,
@@ -18,47 +26,123 @@ import {
   ThemeMode,
 } from './types/game';
 
+function triggerSoundForActionType(
+  actionType?: string,
+  verdictResult?: 'ПРОБИЛА' | 'ОТБИТА' | 'НЕ ПРИНЯТА'
+): void {
+  if (!actionType || actionType === 'TICK_SECOND') return;
+  if (actionType === 'SUBMIT_CARD') {
+    instrumentAudio.playCardDrop();
+  } else if (actionType === 'SUBMIT_VERDICT') {
+    if (verdictResult === 'ПРОБИЛА') instrumentAudio.playStampImpact('ПРОБИЛА');
+    else if (verdictResult === 'ОТБИТА') instrumentAudio.playStampImpact('ОТБИТА');
+    else instrumentAudio.playRelayClick();
+  } else if (
+    actionType === 'SET_PHASE' ||
+    actionType === 'NEXT_PHASE' ||
+    actionType === 'PREV_PHASE'
+  ) {
+    instrumentAudio.playPlateRise();
+  } else {
+    instrumentAudio.playRelayClick();
+  }
+}
+
 export const App: React.FC = () => {
-  const [state, setState] = useState<SessionState>(() =>
-    createInitialSession('4826')
+  const windowId = useMemo(
+    () => `win-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`,
+    []
   );
-  const [activeScreen, setActiveScreen] = useState<ScreenView>('hall');
-  const [activeBrigade, setActiveBrigade] = useState<BrigadeId>('TRY');
-  const [activeRole, setActiveRole] = useState<MemberRole>('аналитик');
+
+  const launchConfig = useMemo(() => {
+    if (typeof window === 'undefined') return {};
+    return parseLaunchParams(window.location.search, window.location.hash);
+  }, []);
+
+  const [state, setState] = useState<SessionState>(() => {
+    const persisted = loadPersistedSessionState();
+    return persisted || createInitialSession('4826');
+  });
+
+  const [activeScreen, setActiveScreen] = useState<ScreenView>(
+    () => launchConfig.screen || 'hall'
+  );
+  const [activeBrigade, setActiveBrigade] = useState<BrigadeId>(
+    () => launchConfig.brigade || 'TRY'
+  );
+  const [activeRole, setActiveRole] = useState<MemberRole>(
+    () => launchConfig.role || 'аналитик'
+  );
   const [loginOpen, setLoginOpen] = useState<boolean>(false);
   const [emergencyOpen, setEmergencyOpen] = useState<boolean>(false);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [syncedWindowCount, setSyncedWindowCount] = useState<number>(1);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [projectorCleanMode, setProjectorCleanMode] = useState<boolean>(false);
+  const [projectorCleanMode, setProjectorCleanMode] = useState<boolean>(
+    () => Boolean(launchConfig.projectorClean)
+  );
 
   const wsRef = useRef<WebSocket | null>(null);
+  const syncBusRef = useRef<CrossWindowSyncBus | null>(null);
+  const stateRef = useRef<SessionState>(state);
+  stateRef.current = state;
+
   const localModeRef = useRef<AppMode>(state.mode);
   localModeRef.current = state.mode;
+
+  const activeScreenRef = useRef<ScreenView>(activeScreen);
+  activeScreenRef.current = activeScreen;
 
   // Синхронизация атрибута темы на корневом документе
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', state.theme);
   }, [state.theme]);
 
-  // Отправка действия: со звуковым откликом + отправкой на сервер (если не АВТОНОМНЫЙ)
-  const dispatch = useCallback((action: GameAction) => {
-    if (action.type === 'SUBMIT_CARD') {
-      instrumentAudio.playCardDrop();
-    } else if (action.type === 'SUBMIT_VERDICT') {
-      if (action.result === 'ПРОБИЛА') instrumentAudio.playStampImpact('ПРОБИЛА');
-      else if (action.result === 'ОТБИТА') instrumentAudio.playStampImpact('ОТБИТА');
-      else instrumentAudio.playRelayClick();
-    } else if (
-      action.type === 'SET_PHASE' ||
-      action.type === 'NEXT_PHASE' ||
-      action.type === 'PREV_PHASE'
-    ) {
-      instrumentAudio.playPlateRise();
-    } else if (action.type !== 'TICK_SECOND') {
-      instrumentAudio.playRelayClick();
-    }
+  // Реакция на смену #hash (например, если в текущем окне перешли на #projector)
+  useEffect(() => {
+    const onHashChange = () => {
+      const cfg = parseLaunchParams(window.location.search, window.location.hash);
+      if (cfg.screen) setActiveScreen(cfg.screen);
+      if (cfg.projectorClean !== undefined) {
+        setProjectorCleanMode(cfg.projectorClean);
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
-    setState((prev) => gameReducer(prev, action));
+  // Межвкладочная шина синхронизации (BroadcastChannel + localStorage) — работает и без сервера/сети
+  useEffect(() => {
+    const bus = createCrossWindowSyncBus({
+      windowId,
+      getCurrentState: () => stateRef.current,
+      onRemoteState: (remoteState, actionType) => {
+        triggerSoundForActionType(actionType, remoteState.lastGesture?.outcome);
+        setState(remoteState);
+      },
+      onPeersChanged: (count) => {
+        setSyncedWindowCount(count);
+      },
+    });
+    syncBusRef.current = bus;
+    return () => {
+      bus.close();
+      syncBusRef.current = null;
+    };
+  }, [windowId]);
+
+  // Отправка действия: со звуковым откликом + рассылкой в соседние окна + отправкой на сервер
+  const dispatch = useCallback((action: GameAction) => {
+    triggerSoundForActionType(
+      action.type,
+      action.type === 'SUBMIT_VERDICT' ? action.result : undefined
+    );
+
+    setState((prev) => {
+      const next = gameReducer(prev, action);
+      syncBusRef.current?.publishState(next, action.type);
+      return next;
+    });
 
     if (
       localModeRef.current !== 'АВТОНОМНЫЙ' &&
@@ -71,7 +155,10 @@ export const App: React.FC = () => {
 
   // Подключение к серверу партии по WebSocket с автоматическим переподключением
   useEffect(() => {
-    if (state.mode === 'АВТОНОМНЫЙ') {
+    if (
+      state.mode === 'АВТОНОМНЫЙ' ||
+      window.location.protocol === 'file:'
+    ) {
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -99,6 +186,7 @@ export const App: React.FC = () => {
           try {
             const msg = JSON.parse(event.data);
             if (msg?.type === 'STATE_SYNC' && msg.state) {
+              persistSessionState(msg.state);
               setState(msg.state);
             }
           } catch {
@@ -133,16 +221,24 @@ export const App: React.FC = () => {
     };
   }, [state.mode]);
 
-  // Локальный тик таймера на случай автономного режима или отсутствия WebSocket
+  // Локальный тик таймера с защитой от двойного хода часов (Clock Leader Election между окнами)
   useEffect(() => {
     if (wsConnected && state.mode !== 'АВТОНОМНЫЙ') return;
     const timer = window.setInterval(() => {
-      setState((prev) =>
-        prev.timerRunning ? gameReducer(prev, { type: 'TICK_SECOND' }) : prev
-      );
+      if (!stateRef.current.timerRunning) return;
+      const isPreferredHost = activeScreenRef.current === 'host';
+      const isLeader = acquireOrCheckClockLeader(windowId, isPreferredHost);
+      if (!isLeader) return;
+
+      setState((prev) => {
+        if (!prev.timerRunning) return prev;
+        const next = gameReducer(prev, { type: 'TICK_SECOND' });
+        syncBusRef.current?.publishState(next, 'TICK_SECOND');
+        return next;
+      });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [wsConnected, state.mode]);
+  }, [wsConnected, state.mode, windowId]);
 
   // Глобальные горячие клавиши ведущего и арбитра
   useEffect(() => {
@@ -221,6 +317,13 @@ export const App: React.FC = () => {
     if (next) instrumentAudio.playRelayClick();
   };
 
+  const handleOpenProjectorWindow = useCallback(() => {
+    persistSessionState(stateRef.current);
+    const baseUrl = window.location.href.split('#')[0];
+    const targetUrl = `${baseUrl}#projector`;
+    window.open(targetUrl, '_blank');
+  }, []);
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {!projectorCleanMode ? (
@@ -241,9 +344,11 @@ export const App: React.FC = () => {
           }}
           onOpenEmergencyMenu={() => setEmergencyOpen(true)}
           wsConnected={wsConnected}
+          syncedWindowCount={syncedWindowCount}
           soundEnabled={soundEnabled}
           onToggleSound={handleToggleSound}
           onToggleProjectorMode={() => setProjectorCleanMode(true)}
+          onOpenProjectorWindow={handleOpenProjectorWindow}
         />
       ) : (
         <div
@@ -253,13 +358,27 @@ export const App: React.FC = () => {
             top: '8px',
             right: '12px',
             zIndex: 50,
+            display: 'flex',
+            gap: '6px',
           }}
         >
+          <span
+            className="mono"
+            style={{
+              fontSize: '13px',
+              padding: '4px 8px',
+              background: 'rgba(8, 24, 42, 0.85)',
+              border: '1px solid var(--border-metal)',
+              color: 'var(--color-stable)',
+            }}
+          >
+            ПРОЕКТОР · ОКОН: {syncedWindowCount}
+          </span>
           <button
             type="button"
             onClick={() => setProjectorCleanMode(false)}
             className="instrument-btn mono"
-            style={{ opacity: 0.78, fontSize: '13px', padding: '4px 10px' }}
+            style={{ opacity: 0.82, fontSize: '13px', padding: '4px 10px' }}
           >
             Показать верхнюю панель [F]
           </button>
@@ -291,7 +410,12 @@ export const App: React.FC = () => {
         )}
 
         {activeScreen === 'host' && (
-          <HostPanel state={state} dispatch={dispatch} />
+          <HostPanel
+            state={state}
+            dispatch={dispatch}
+            onOpenProjectorWindow={handleOpenProjectorWindow}
+            syncedWindowCount={syncedWindowCount}
+          />
         )}
 
         {activeScreen === 'materials' && (
@@ -369,6 +493,21 @@ export const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  handleOpenProjectorWindow();
+                  setEmergencyOpen(false);
+                }}
+                className="instrument-btn btn-action"
+                style={{ justifyContent: 'space-between', padding: '12px 14px' }}
+              >
+                <span>
+                  <strong>Два экрана на одном ПК (без сети):</strong> Открыть окно проектора ↗
+                </span>
+                <span className="mono">BroadcastChannel ({syncedWindowCount} ок.)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
                   dispatch({ type: 'SET_MODE', mode: 'РУЧНОЙ' });
                   setEmergencyOpen(false);
                 }}
@@ -387,7 +526,7 @@ export const App: React.FC = () => {
                   dispatch({ type: 'SET_MODE', mode: 'АВТОНОМНЫЙ' });
                   setEmergencyOpen(false);
                 }}
-                className="instrument-btn btn-action"
+                className="instrument-btn"
                 style={{ justifyContent: 'space-between', padding: '12px 14px' }}
               >
                 <span>
