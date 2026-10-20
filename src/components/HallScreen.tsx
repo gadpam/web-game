@@ -18,6 +18,7 @@ import {
   SessionState,
 } from '../types/game';
 import { PracticeWorkbench } from './PracticeWorkbench';
+import { FinalPhasesPanel } from './FinalPhasesPanel';
 
 interface HallScreenProps {
   state: SessionState;
@@ -51,10 +52,11 @@ export const HallScreen: React.FC<HallScreenProps> = ({
 
   const isPrologue = state.phase.startsWith('prologue_');
   const isPracticePhase = state.phase === 'practice';
-  const isQueueBoardPhase =
-    state.phase === 'start_0900' ||
+  const isFinalPhasePanel =
+    state.phase === 'five_min' ||
     state.phase === 'closed' ||
     state.phase === 'homework';
+  const isQueueBoardPhase = state.phase === 'start_0900';
 
   const queueCells = useMemo(() => {
     const total = 1240;
@@ -139,6 +141,41 @@ export const HallScreen: React.FC<HallScreenProps> = ({
           >
             Снять стоп-кран и продолжить бой
           </button>
+        </div>
+      )}
+
+      {/* Сигнал Апелляции Докладчика (30 с, одна на бой — Документ 01, п. 7) */}
+      {activeBattle.appealUsed && activeBattle.appealRemainingSec > 0 && (
+        <div
+          className="material-armor no-print"
+          style={{
+            margin: '10px 16px 0 16px',
+            padding: '12px 18px',
+            borderLeft: '6px solid var(--color-action)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px',
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: '18px',
+                fontWeight: 900,
+                color: 'var(--color-action)',
+              }}
+            >
+              АПЕЛЛЯЦИЯ ДОКЛАДЧИКА ({activeBattle.defender}) · ОДНА НА БОЙ · 30 СЕКУНД
+            </div>
+            <div className="mono" style={{ fontSize: '14px' }}>
+              Разбирается арбитром ({activeBattle.arbiter}) немедленно. Решение арбитра окончательное.
+            </div>
+          </div>
+          <div className="seven-segment-window amber-zone" style={{ fontSize: '28px' }}>
+            00:{String(activeBattle.appealRemainingSec).padStart(2, '0')}
+          </div>
         </div>
       )}
 
@@ -246,6 +283,24 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 }`}
               >
                 09:00 Табло (1240)
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_PHASE', phase: 'closed' })}
+                className={`instrument-btn ${
+                  state.phase === 'closed' ? 'btn-action' : ''
+                }`}
+              >
+                09:07 Рефлексия
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_PHASE', phase: 'homework' })}
+                className={`instrument-btn ${
+                  state.phase === 'homework' ? 'btn-action' : ''
+                }`}
+              >
+                09:15 ДЗ
               </button>
             </div>
           </div>
@@ -999,8 +1054,17 @@ export const HallScreen: React.FC<HallScreenProps> = ({
             <PracticeWorkbench state={state} dispatch={dispatch} />
           )}
 
-          {/* ================= ФАЗА БОЁВ 1–4, ЗАТИШЬЯ, 5 МИНУТ ДО: ПОЛИГОН КОДА ================= */}
-          {!isPrologue && !isPracticePhase && !isQueueBoardPhase && (
+          {/* ================= ФАЗЫ 08:55 ОТСЧЁТ / 09:07 РЕФЛЕКСИЯ / 09:15 ДЗ ================= */}
+          {isFinalPhasePanel && (
+            <FinalPhasesPanel
+              state={state}
+              dispatch={dispatch}
+              onNavigateScreen={onNavigateScreen}
+            />
+          )}
+
+          {/* ================= ФАЗА БОЁВ 1–4, ЗАТИШЬЯ: ПОЛИГОН КОДА ================= */}
+          {!isPrologue && !isPracticePhase && !isFinalPhasePanel && !isQueueBoardPhase && (
             <div
               className="gesture-plate-rise"
               style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}

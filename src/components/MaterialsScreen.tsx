@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  COMMISSION_QA,
   DEFENSE_SLIDES_12,
   INITIAL_SHIELD_RULES,
   REFERENCE_CARDS,
@@ -911,6 +912,52 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
               >
                 Следующий слайд →
               </button>
+            </div>
+
+            {/* Ответы на вопросы конкурсной комиссии (Документ 11, п. 4) */}
+            <div
+              style={{
+                marginTop: '20px',
+                paddingTop: '14px',
+                borderTop: '1px solid var(--border-metal)',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--color-warning)',
+                  fontWeight: 800,
+                  marginBottom: '8px',
+                }}
+              >
+                ОТВЕТЫ НА ТИПОВЫЕ ВОПРОСЫ КОНКУРСНОЙ КОМИССИИ (ДОКУМЕНТ 11):
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                  gap: '10px',
+                }}
+              >
+                {COMMISSION_QA.map((item, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '10px 12px',
+                      background: 'rgba(0,0,0,0.34)',
+                      border: '1px solid var(--border-metal)',
+                      fontSize: '13px',
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>
+                      В: «{item.q}»
+                    </div>
+                    <div style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      О: {item.a}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>

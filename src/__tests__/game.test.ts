@@ -6,6 +6,7 @@ import {
   getUnlockedShieldCount,
   isShieldComplete,
   validateCardInput,
+  validateJournalEntry,
 } from '../game/engine';
 import { KIT_DOCUMENTS } from '../game/kitDocuments';
 import { gameReducer } from '../game/reducer';
@@ -109,6 +110,19 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
       statement: 'int.Parse("") выбрасывает FormatException на строке 12',
     });
     expect(goodCard.valid).toBe(true);
+
+    // Проверка правила Журнала Писаря (Документ 07, п. 4: «Обсудили и решили» — не запись)
+    const badJournal = validateJournalEntry({
+      claimed: 'Обсудили и решили поставить защиту',
+      verified: 'всё нормально',
+    });
+    expect(badJournal.valid).toBe(false);
+
+    const goodJournal = validateJournalEntry({
+      claimed: 'Строка 12, FormatException',
+      verified: 'Запуск: пакет 1214/1240 прошёл, 26 в отчёт',
+    });
+    expect(goodJournal.valid).toBe(true);
   });
 
   it('выполняет живой запуск полигона для всех 4 боёв («Перехват», «Порядок», «Гарантия», «Честность»)', () => {
@@ -148,6 +162,35 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
     // Снятие стоп-крана
     state = gameReducer(state, { type: 'TOGGLE_ARBITER_STOP' });
     expect(state.battles[1].arbiterStopActive).toBe(false);
+
+    // Апелляция Докладчика (30 с, одна на бой — Документ 01, п. 7)
+    state = gameReducer(state, { type: 'START_APPEAL' });
+    expect(state.battles[1].appealUsed).toBe(true);
+    expect(state.battles[1].appealRemainingSec).toBe(30);
+    state = gameReducer(state, { type: 'TICK_SECOND' });
+    expect(state.battles[1].appealRemainingSec).toBe(29);
+  });
+
+  it('синхронизирует часы смены секунда в секунду в фазе 08:55 Пять минут до старта и распределяет номинации 09:07', () => {
+    let state = createInitialSession('4826');
+    state = gameReducer(state, { type: 'SET_PHASE', phase: 'five_min' });
+    state = gameReducer(state, { type: 'TOGGLE_TIMER' });
+    state = gameReducer(state, { type: 'TICK_SECOND' });
+    expect(state.shiftClock).toBe('08:55:01');
+
+    state = gameReducer(state, {
+      type: 'SET_WAVE_HOLDER',
+      waveId: 1,
+      holder: 'CATCH',
+    });
+    expect(state.waves.find((w) => w.id === 1)?.holder).toBe('CATCH');
+
+    state = gameReducer(state, {
+      type: 'SET_NOMINATION',
+      nomination: 'honestMistake',
+      brigade: 'TRY',
+    });
+    expect(state.nominations.honestMistake).toBe('TRY');
   });
 
   it('проверяет практику 08:05: сборку 4 рубежей патча и собственный класс TicketBookingException : Exception', () => {

@@ -428,6 +428,40 @@ export function validateCardInput(input: {
   return { valid: true };
 }
 
+export function validateJournalEntry(input: {
+  claimed: string;
+  verified: string;
+}): CardValidationResult {
+  const claimed = (input.claimed || '').trim();
+  const verified = (input.verified || '').trim();
+
+  if (claimed.length < 6) {
+    return {
+      valid: false,
+      reason:
+        'Правило журнала (Документ 07, п. 4): укажите конкретно, что было заявлено (строка или тип).',
+    };
+  }
+
+  const forbiddenPhrases = [
+    'обсудили и решили',
+    'всё нормально',
+    'поговорили',
+    'исправили ошибку',
+    'сделали задание',
+  ];
+  const combined = `${claimed} ${verified}`.toLowerCase();
+  if (forbiddenPhrases.some((p) => combined.includes(p))) {
+    return {
+      valid: false,
+      reason:
+        'Правило журнала: «Обсудили и решили» — не запись. Запись должна позволять восстановить бой через сутки без свидетелей (строка, тип, результат запуска).',
+    };
+  }
+
+  return { valid: true };
+}
+
 export function evaluatePolygonRun(
   battleNumber: 1 | 2 | 3 | 4,
   appliedSlots: number[],

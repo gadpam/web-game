@@ -112,6 +112,11 @@ export type GameAction =
       brigade: BrigadeId;
       role: MemberRole;
     }
+  | {
+      type: 'SET_NOMINATION';
+      nomination: 'mostPreciseAnalysis' | 'bestJournal' | 'honestMistake';
+      brigade: BrigadeId;
+    }
   | { type: 'IMPORT_SESSION_STATE'; imported: SessionState }
   | { type: 'LOAD_DEMO_1210' }
   | { type: 'RESET_SESSION' };
@@ -1134,6 +1139,16 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       return {
         ...state,
         players: [...filtered, newPlayer],
+      };
+    }
+
+    case 'SET_NOMINATION': {
+      return {
+        ...state,
+        nominations: {
+          ...state.nominations,
+          [action.nomination]: action.brigade,
+        },
       };
     }
 

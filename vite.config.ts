@@ -30,4 +30,19 @@ export default defineConfig({
     port: 4173,
     allowedHosts: true,
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+          if (id.includes('kitDocuments')) {
+            return 'kit-docs';
+          }
+          return undefined;
+        },
+      },
+    },
+  },
 });

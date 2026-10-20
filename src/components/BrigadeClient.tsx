@@ -4,7 +4,7 @@ import {
   PATCH_SLOTS,
   REFERENCE_CARDS,
 } from '../game/constants';
-import { validateCardInput } from '../game/engine';
+import { validateCardInput, validateJournalEntry } from '../game/engine';
 import { GameAction } from '../game/reducer';
 import { getWorldPolygonFiles } from '../game/worldPolygons';
 import {
@@ -73,6 +73,19 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
     reason?: string;
   } | null>(null);
   const [showPracticeTab, setShowPracticeTab] = useState(false);
+
+  // Поля рабочего места Писаря (Журнал смены — Документ 07, п. 4)
+  const [scribeClaimed, setScribeClaimed] = useState<string>(
+    `Строка ${activeBattle.targetLine}, ${activeBattle.targetException}`
+  );
+  const [scribeVerified, setScribeVerified] = useState<string>(
+    'Запуск полигона: обработчик перехватил мины'
+  );
+  const [scribeResult, setScribeResult] = useState<string>('ОТБИТА');
+  const [scribeFeedback, setScribeFeedback] = useState<{
+    valid: boolean;
+    reason?: string;
+  } | null>(null);
 
   const currentFileSpec = worldPolygonFiles[state.selectedPolygonFile];
 
@@ -208,6 +221,45 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Оверлей приглушения экранов на время Доклада стоя / Вердикта (Документ 00, п. 10) */}
+      {state.screensDimmedForStandingReport && (
+        <div
+          className="material-armor screw-corners"
+          style={{
+            padding: '14px 18px',
+            borderLeft: '6px solid var(--color-warning)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '12px',
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: '18px',
+                fontWeight: 900,
+                color: 'var(--color-warning)',
+              }}
+            >
+              ЭКРАНЫ БРИГАД ПРИГЛУШЕНЫ · ДОКЛАД СТОЯ У ЭКРАНА ЗАЛА
+            </div>
+            <div style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+              «Восемнадцать человек за ноутбуками дают "спины". Стоящий Докладчик или
+              Арбитр возвращает в класс живую речь.» Развернитесь к экрану зала.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'TOGGLE_DIM_SCREENS' })}
+            className="instrument-btn"
+          >
+            Вернуть яркость экранов
+          </button>
+        </div>
+      )}
 
       {/* Инструкция для выбранной роли */}
       <div
@@ -701,6 +753,209 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
           </div>
         </div>
       )}
+
+      {/* Нижний ряд ролевых приборов бригады: 1) Пульт Чтеца и Докладчика (Апелляция 30 с) · 2) Пульт Писаря (Журнал смены) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '44fr 56fr',
+          gap: '16px',
+        }}
+      >
+        {/* ПУЛЬТ ЧТЕЦА И ДОКЛАДЧИКА (ДОСЛОВНОЕ ЧТЕНИЕ + АПЕЛЛЯЦИЯ 30 С) */}
+        <div
+          className="material-armor screw-corners"
+          style={{
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            gap: '10px',
+          }}
+        >
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '13px',
+                color: 'var(--color-warning)',
+                fontWeight: 800,
+              }}
+            >
+              <span>ПУЛЬТ ЧТЕЦА И ДОКЛАДЧИКА (ВЫСТУПЛЕНИЕ СТОЯ)</span>
+              <span>ДОКУМЕНТ 01, П. 5 И 7</span>
+            </div>
+
+            <div
+              className="mono"
+              style={{
+                marginTop: '8px',
+                padding: '10px 12px',
+                background: 'rgba(0,0,0,0.36)',
+                border: '1px solid var(--border-metal)',
+                fontSize: '14px',
+              }}
+            >
+              <div style={{ color: 'var(--text-caption)', fontSize: '13px' }}>
+                Формула Докладчика стоя (Такт 2 «Объявление»):
+              </div>
+              <div style={{ fontWeight: 800, marginTop: '2px' }}>
+                «Бригада {brigadeObj.name}. {cardType === 'атака' ? 'Атакуем' : 'Защищаем'}{' '}
+                строку {lineInput} в файле {state.selectedPolygonFile}, тип —{' '}
+                {exceptionInput}.»
+              </div>
+              <div
+                style={{
+                  color: 'var(--text-caption)',
+                  fontSize: '13px',
+                  marginTop: '6px',
+                }}
+              >
+                Дословный текст Чтеца (без импровизации):
+              </div>
+              <div style={{ color: 'var(--color-action)', marginTop: '2px' }}>
+                «Строка {lineInput}. Тип {exceptionInput}. {statementInput}»
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Апелляция Докладчика: 1 раз за бой, 30 секунд.
+            </div>
+            <button
+              type="button"
+              disabled={activeBattle.appealUsed}
+              onClick={() => dispatch({ type: 'START_APPEAL' })}
+              className="instrument-btn btn-warning"
+            >
+              {activeBattle.appealUsed
+                ? `Апелляция подана (${activeBattle.appealRemainingSec} с)`
+                : 'Подать апелляцию Докладчика (30 с)'}
+            </button>
+          </div>
+        </div>
+
+        {/* ПУЛЬТ ПИСАРЯ: ВЕДЕНИЕ ЖУРНАЛА СМЕНЫ (ДОКУМЕНТ 07, П. 4) */}
+        <div
+          className="material-paper"
+          style={{
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-caption)',
+                  fontWeight: 700,
+                }}
+              >
+                РАБОЧЕЕ МЕСТО ПИСАРЯ · ЖУРНАЛ СМЕНЫ (ДОКУМЕНТ 07, П. 4)
+              </div>
+              <div style={{ fontSize: '15px', fontWeight: 900 }}>
+                «Запись должна позволять восстановить бой через сутки без свидетелей.
+                "Обсудили и решили" — не запись.»
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr 130px auto',
+              gap: '8px',
+              alignItems: 'center',
+            }}
+          >
+            <input
+              type="text"
+              value={scribeClaimed}
+              onChange={(e) => setScribeClaimed(e.target.value)}
+              placeholder="Что заявлено (строка, тип)"
+              className="instrument-btn mono"
+              style={{ fontSize: '13px' }}
+            />
+            <input
+              type="text"
+              value={scribeVerified}
+              onChange={(e) => setScribeVerified(e.target.value)}
+              placeholder="Что проверено запуском"
+              className="instrument-btn mono"
+              style={{ fontSize: '13px' }}
+            />
+            <select
+              value={scribeResult}
+              onChange={(e) => setScribeResult(e.target.value)}
+              className="instrument-btn mono"
+              style={{ fontSize: '13px' }}
+            >
+              <option value="ОТБИТА">ОТБИТА</option>
+              <option value="ПРОБИЛА">ПРОБИЛА</option>
+              <option value="+1 ПРОПУСК">+1 ПРОПУСК</option>
+              <option value="ПАТЧ">ПАТЧ</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                const check = validateJournalEntry({
+                  claimed: scribeClaimed,
+                  verified: scribeVerified,
+                });
+                setScribeFeedback(check);
+                if (!check.valid) return;
+                dispatch({
+                  type: 'ADD_JOURNAL_ENTRY',
+                  actor: `Писарь (${activeBrigade})`,
+                  claimed: scribeClaimed,
+                  verified: scribeVerified,
+                  result: scribeResult,
+                });
+              }}
+              className="instrument-btn btn-stable"
+            >
+              Записать в журнал
+            </button>
+          </div>
+
+          {scribeFeedback && (
+            <div
+              style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                color: scribeFeedback.valid
+                  ? 'var(--color-stable)'
+                  : 'var(--color-incident)',
+              }}
+            >
+              {scribeFeedback.valid
+                ? 'Запись Писаря внесена в Журнал смены и Протокол.'
+                : scribeFeedback.reason}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

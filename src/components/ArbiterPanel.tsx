@@ -118,6 +118,18 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             type="button"
+            disabled={activeBattle.appealUsed}
+            onClick={() => dispatch({ type: 'START_APPEAL' })}
+            className="instrument-btn btn-action"
+            title="Апелляция докладчика: 30 секунд, одна на бой (Документ 01, п. 7)"
+          >
+            {activeBattle.appealUsed
+              ? `Апелляция (${activeBattle.appealRemainingSec} с)`
+              : 'Апелляция 30 с'}
+          </button>
+
+          <button
+            type="button"
             onClick={() =>
               dispatch({ type: 'TOGGLE_ARBITER_STOP', reason: stopReason })
             }
