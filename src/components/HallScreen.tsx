@@ -19,6 +19,7 @@ import {
 } from '../types/game';
 import { PracticeWorkbench } from './PracticeWorkbench';
 import { FinalPhasesPanel } from './FinalPhasesPanel';
+import { REHEARSAL_CHECKPOINTS } from '../game/rehearsal';
 
 interface HallScreenProps {
   state: SessionState;
@@ -38,6 +39,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
   onNavigateScreen,
 }) => {
   const [safetyCoverOpen, setSafetyCoverOpen] = useState(false);
+  const [bkpOpen, setBkpOpen] = useState(false);
 
   const currentPhaseMeta =
     PHASES.find((p) => p.id === state.phase) || PHASES[0];
@@ -302,8 +304,53 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               >
                 09:15 ДЗ
               </button>
+              <button
+                type="button"
+                onClick={() => setBkpOpen((p) => !p)}
+                className={`instrument-btn ${bkpOpen ? 'btn-warning' : ''}`}
+                title="Открыть плашку БКП-1 (8 контрольных точек прогона для жюри)"
+              >
+                Прогон БКП-1
+              </button>
             </div>
           </div>
+
+          {bkpOpen && (
+            <div
+              className="material-armor no-print"
+              style={{
+                padding: '10px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
+              }}
+            >
+              <span className="brass-nameplate" style={{ fontSize: '12px' }}>
+                БКП-1 · 8 ТОЧЕК ДЛЯ ЖЮРИ
+              </span>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {REHEARSAL_CHECKPOINTS.map((cp) => (
+                  <button
+                    key={cp.id}
+                    type="button"
+                    onClick={() =>
+                      dispatch({
+                        type: 'APPLY_REHEARSAL_CHECKPOINT',
+                        checkpointId: cp.id,
+                      })
+                    }
+                    className="instrument-btn mono"
+                    style={{ fontSize: '13px', padding: '5px 9px' }}
+                    title={`${cp.title} — ${cp.speakerLine}`}
+                  >
+                    {cp.shortTitle}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ================= СОДЕРЖИМОЕ МОНИТОРА ПО ФАЗЕ ================= */}
           {isPrologue && (

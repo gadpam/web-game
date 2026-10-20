@@ -29,6 +29,11 @@ import {
   ThemeMode,
   WorldId,
 } from '../types/game';
+import {
+  applyDisputeScenario,
+  applyRehearsalCheckpoint,
+  DisputeScenarioId,
+} from './rehearsal';
 
 export type GameAction =
   | { type: 'SET_PHASE'; phase: PhaseId }
@@ -116,6 +121,14 @@ export type GameAction =
       type: 'SET_NOMINATION';
       nomination: 'mostPreciseAnalysis' | 'bestJournal' | 'honestMistake';
       brigade: BrigadeId;
+    }
+  | {
+      type: 'APPLY_REHEARSAL_CHECKPOINT';
+      checkpointId: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+    }
+  | {
+      type: 'SIMULATE_DISPUTE_SCENARIO';
+      scenarioId: DisputeScenarioId;
     }
   | { type: 'IMPORT_SESSION_STATE'; imported: SessionState }
   | { type: 'LOAD_DEMO_1210' }
@@ -1150,6 +1163,14 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
           [action.nomination]: action.brigade,
         },
       };
+    }
+
+    case 'APPLY_REHEARSAL_CHECKPOINT': {
+      return applyRehearsalCheckpoint(state, action.checkpointId);
+    }
+
+    case 'SIMULATE_DISPUTE_SCENARIO': {
+      return applyDisputeScenario(state, action.scenarioId);
     }
 
     case 'IMPORT_SESSION_STATE': {

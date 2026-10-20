@@ -390,4 +390,79 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
       true
     );
   });
+
+  it('выполняет все 8 контрольных точек БКП-1 (APPLY_REHEARSAL_CHECKPOINT) для показа комиссии', () => {
+    const base = createInitialSession('4826');
+
+    const t1 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 1 });
+    expect(t1.phase).toBe('prologue_1');
+    expect(t1.prologue.pollRevealed).toBe(true);
+
+    const t2 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 2 });
+    expect(t2.phase).toBe('prologue_2');
+    expect(t2.prologue.batchCrashed).toBe(true);
+    expect(getUnlockedShieldCount(t2)).toBe(1);
+
+    const t3 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 3 });
+    expect(t3.phase).toBe('prologue_3');
+    expect(t3.prologue.batchRepelled).toBe(true);
+    expect(getUnlockedShieldCount(t3)).toBe(2);
+
+    const t4 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 4 });
+    expect(t4.phase).toBe('prologue_4');
+    expect(t4.prologue.secondWaveTriggered).toBe(true);
+
+    const t5 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 5 });
+    expect(t5.phase).toBe('battle_1');
+    expect(t5.battles[1].lastRun?.outcome).toBe('ПРОБИЛА');
+
+    const t6 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 6 });
+    expect(t6.phase).toBe('battle_1');
+    expect(t6.battles[1].lastRun?.outcome).toBe('ОТБИТА');
+    expect(t6.battles[1].missedSpotAwarded).toBe(true);
+    expect(getUnlockedShieldCount(t6)).toBe(3);
+
+    const t7 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 7 });
+    expect(t7.phase).toBe('five_min');
+    expect(isShieldComplete(t7)).toBe(true);
+
+    const t8 = gameReducer(base, { type: 'APPLY_REHEARSAL_CHECKPOINT', checkpointId: 8 });
+    expect(t8.phase).toBe('start_0900');
+    expect(t8.queue.issued).toBe(1210);
+  });
+
+  it('моделирует все 5 спорных ситуаций раздела 11 Регламента (SIMULATE_DISPUTE_SCENARIO)', () => {
+    const base = createInitialSession('4826');
+
+    const s1 = gameReducer(base, {
+      type: 'SIMULATE_DISPUTE_SCENARIO',
+      scenarioId: 'vague_error_type',
+    });
+    expect(s1.battles[1].attackCard?.valid).toBe(false);
+
+    const s2 = gameReducer(base, {
+      type: 'SIMULATE_DISPUTE_SCENARIO',
+      scenarioId: 'missing_line_number',
+    });
+    expect(s2.battles[1].verdict?.result).toBe('НЕ ПРИНЯТА');
+
+    const s3 = gameReducer(base, {
+      type: 'SIMULATE_DISPUTE_SCENARIO',
+      scenarioId: 'unpatched_promise',
+    });
+    expect(s3.battles[1].lastRun?.outcome).toBe('ПРОБИЛА');
+
+    const s4 = gameReducer(base, {
+      type: 'SIMULATE_DISPUTE_SCENARIO',
+      scenarioId: 'counter_divide_by_zero',
+    });
+    expect(s4.battles[1].lastRun?.outcome).toBe('ПРОБИЛА');
+    expect(s4.battles[1].lastRun?.exceptionType).toBe('DivideByZeroException');
+
+    const s5 = gameReducer(base, {
+      type: 'SIMULATE_DISPUTE_SCENARIO',
+      scenarioId: 'arbiter_stop_dispute',
+    });
+    expect(s5.battles[2].arbiterStopActive).toBe(true);
+  });
 });

@@ -14,6 +14,7 @@ import {
   SessionState,
   WorldId,
 } from '../types/game';
+import { RehearsalTrainerPanel } from './RehearsalTrainerPanel';
 
 interface HostPanelProps {
   state: SessionState;
@@ -129,6 +130,9 @@ export const HostPanel: React.FC<HostPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {/* БЛОК КОНТРОЛЬНОГО ПРОГОНА БКП-1 (8 ТОЧЕК ДЛЯ КОМИССИИ) + ТРЕНАЖЁР СПОРНЫХ СИТУАЦИЙ */}
+      <RehearsalTrainerPanel state={state} dispatch={dispatch} />
 
       {/* СЕТКА УПРАВЛЕНИЯ: 1. Часы урока и фазы · 2. Счёт бригад и Бой 4 по рейтингу */}
       <div
