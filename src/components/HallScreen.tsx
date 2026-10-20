@@ -25,6 +25,7 @@ import {
   AutonomousQueueStrip,
   ManualVoiceCardBar,
 } from './ManualAutonomousStrip';
+import { DidacticCycleStrip } from './DidacticCycleStrip';
 
 interface HallScreenProps {
   state: SessionState;
@@ -45,6 +46,7 @@ export const HallScreen: React.FC<HallScreenProps> = ({
 }) => {
   const [safetyCoverOpen, setSafetyCoverOpen] = useState(false);
   const [bkpOpen, setBkpOpen] = useState(false);
+  const [didacticStripOpen, setDidacticStripOpen] = useState(false);
 
   const currentPhaseMeta =
     PHASES.find((p) => p.id === state.phase) || PHASES[0];
@@ -317,8 +319,20 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               >
                 Прогон БКП-1
               </button>
+              <button
+                type="button"
+                onClick={() => setDidacticStripOpen((p) => !p)}
+                className={`instrument-btn ${didacticStripOpen ? 'btn-action' : ''}`}
+                title="Показать / скрыть приборную ленту 5 шагов открытия понятия (1. Нужда → 5. Имя)"
+              >
+                Цикл «Нужда → Имя»
+              </button>
             </div>
           </div>
+
+          {didacticStripOpen && (
+            <DidacticCycleStrip state={state} dispatch={dispatch} />
+          )}
 
           {bkpOpen && (
             <div

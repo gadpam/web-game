@@ -36,6 +36,7 @@ import {
 } from '../game/roleRotation';
 import {
   evaluateSubjectOutcomes,
+  getDidacticContextForState,
   getDidacticCycleStepForState,
   TECH_MAP_STAGES,
 } from '../game/techMap';
@@ -643,5 +644,10 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
     expect(
       evaluateSubjectOutcomes(completed).filter((o) => o.achieved)
     ).toHaveLength(6);
+
+    const b2 = gameReducer(initial, { type: 'SET_PHASE', phase: 'battle_2' });
+    const ctx2 = getDidacticContextForState(b2);
+    expect(ctx2.contextTitle).toContain('Бой 2 «Порядок»');
+    expect(ctx2.nameText).toContain('CS0160');
   });
 });

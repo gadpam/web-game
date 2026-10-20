@@ -19,6 +19,7 @@ import {
   AutonomousQueueStrip,
   ManualVoiceCardBar,
 } from './ManualAutonomousStrip';
+import { DidacticCycleStrip } from './DidacticCycleStrip';
 
 interface HostPanelProps {
   state: SessionState;
@@ -137,6 +138,9 @@ export const HostPanel: React.FC<HostPanelProps> = ({
 
       {/* БЛОК КОНТРОЛЬНОГО ПРОГОНА БКП-1 (8 ТОЧЕК ДЛЯ КОМИССИИ) + ТРЕНАЖЁР СПОРНЫХ СИТУАЦИЙ */}
       <RehearsalTrainerPanel state={state} dispatch={dispatch} />
+
+      {/* ПРИБОРНАЯ ЛЕНТА 5 ШАГОВ ОТКРЫТИЯ ПОНЯТИЯ (1. НУЖДА -> 5. ИМЯ) */}
+      <DidacticCycleStrip state={state} dispatch={dispatch} />
 
       {/* ПУЛЬТ РЕЖИМОВ «РУЧНОЙ» И «АВТОНОМНЫЙ» (ГОЛОСОВЫЕ КАРТЫ + ПОЛОСА ОЧЕРЕДИ 1 240 ЧЕЛ.) */}
       {(state.mode === 'РУЧНОЙ' || state.mode === 'АВТОНОМНЫЙ') && (

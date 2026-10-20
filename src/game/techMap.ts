@@ -29,6 +29,16 @@ export interface SubjectOutcomeStatus {
   achieved: boolean;
 }
 
+export interface DidacticContextDetails {
+  activeStep: DidacticCycleStep;
+  contextTitle: string;
+  needText: string;
+  toolText: string;
+  applyText: string;
+  consequenceText: string;
+  nameText: string;
+}
+
 export const LESSON_PASSPORT = {
   topic: 'Механизм исключений. Блоки try-catch-finally. Иерархия исключений',
   specialty: 'ПОИТ, 3 курс',
@@ -295,6 +305,9 @@ export function getDidacticCycleStepForState(
     if (activeBattle.tact === 'exchange' || activeBattle.tact === 'counter') {
       return DIDACTIC_CYCLE_STEPS[2]; // 3. Применение
     }
+    if (activeBattle.lastRun && activeBattle.tact !== 'verdict') {
+      return DIDACTIC_CYCLE_STEPS[3]; // 4. Последствие
+    }
     return DIDACTIC_CYCLE_STEPS[4]; // 5. Имя (вердикт и правило щита)
   }
 
@@ -305,6 +318,80 @@ export function getDidacticCycleStepForState(
     return DIDACTIC_CYCLE_STEPS[3]; // 4. Последствие
   }
   return DIDACTIC_CYCLE_STEPS[4]; // 5. Имя (five_min, closed)
+}
+
+export function getDidacticContextForState(
+  state: SessionState
+): DidacticContextDetails {
+  const activeStep = getDidacticCycleStepForState(state);
+
+  if (state.phase.startsWith('prologue_')) {
+    return {
+      activeStep,
+      contextTitle: 'Завязка (03:00–03:17) · Вторжение и первая победа',
+      needText: 'Запись #0x1F3 (place = "два") валит весь пакет на 1 240 человек',
+      toolText: 'Три части механизма: try (зона), catch (тип), finally (уборка)',
+      applyText: 'Сборка механизма в разрезе и повторный прогон пакета (1214/1240)',
+      consequenceText: 'Пакет прошёл (ОТБИТО), но в 03:17 пошли 4 новые волны проб',
+      nameText: 'Правила щита №1 «АНАТОМИЯ» и №2 «МЕХАНИЗМ»',
+    };
+  }
+
+  if (state.phase.startsWith('battle_')) {
+    const bNum = state.currentBattleNumber;
+    if (bNum === 1) {
+      return {
+        activeStep,
+        contextTitle: 'Бой 1 «Перехват» (Booking.cs:12)',
+        needText: 'int.Parse(req.Place) без защиты рвёт цикл обработки очереди',
+        toolText: 'Слот #1: блок try-catch вокруг вызова внутри цикла foreach',
+        applyText: 'Карта защиты CATCH + живой запуск на полигоне',
+        consequenceText: 'Контратака count = 0 проверяет полноту перехвата на строке 14',
+        nameText: 'Правило щита №3 «ПЕРЕХВАТ»: обработчик стоит вокруг опасного места',
+      };
+    }
+    if (bNum === 2) {
+      return {
+        activeStep,
+        contextTitle: 'Бой 2 «Порядок» (Pricing.cs:23)',
+        needText: 'catch (Exception) стоит первым и перекрывает дочерние типы',
+        toolText: 'Слот #2: иерархия обработчиков от частного типа к общему предку',
+        applyText: 'Перестановка catch (DivideByZeroException) и catch (FormatException) выше Exception',
+        consequenceText: 'Устранение ошибки компилятора CS0160 и точный перехват двух мин',
+        nameText: 'Правило щита №4 «ПОРЯДОК»: от частного к общему (иначе CS0160)',
+      };
+    }
+    if (bNum === 3) {
+      return {
+        activeStep,
+        contextTitle: 'Бой 3 «Гарантия» (Seats.cs:41)',
+        needText: 'При мине SeatIndex = 7 или раннем return пул из 64 соединений исчерпывается',
+        toolText: 'Слот #3: блок finally { conn.Close(); }',
+        applyText: 'Гарантированное освобождение соединения при любом исходе метода',
+        consequenceText: 'Ноль повисших соединений на всём пакете из 1 240 человек',
+        nameText: 'Правило щита №5 «ГАРАНТИЯ»: finally выполняется всегда',
+      };
+    }
+    return {
+      activeStep,
+      contextTitle: 'Бой 4 «Честность» (Promo.cs:55)',
+      needText: 'Пустой catch {} прячет 26 записей из отчёта, а throw ex; стирает стек',
+      toolText: 'Слот #4: запись в AuditLog + проброс через throw;',
+      applyText: 'Сохранение исходного стека вызовов и фиксация всех 26 мин в отчёте',
+      consequenceText: 'Карантинный отчёт содержит все 26 записей без утайки',
+      nameText: 'Правило щита №6 «ЧЕСТНОСТЬ»: поймал — запиши или пробрось throw;',
+    };
+  }
+
+  return {
+    activeStep,
+    contextTitle: 'Финальный контур смены (08:05–09:15) · Старт и рефлексия',
+    needText: 'К 09:00 провести 1 240 человек через все 4 волны одновременно',
+    toolText: 'Полный Щит 6/6 + собственный тип TicketBookingException',
+    applyText: 'Запуск главной очереди 09:00 (одна попытка, без перезапуска)',
+    consequenceText: `На табло очереди: выдано ${state.queue.issued} из ${state.queue.total} (потеряно ${state.queue.lost})`,
+    nameText: 'Протокол смены 03:00–09:09 и перенос в домашнее задание 3 уровней',
+  };
 }
 
 export function evaluateSubjectOutcomes(
