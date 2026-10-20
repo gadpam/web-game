@@ -112,6 +112,11 @@ export type GameAction =
   | { type: 'SET_BATTLE4_LEADER_ROLE'; role: BattleRole }
   | { type: 'SET_WAVE_SLOT'; waveId: 1 | 2 | 3 | 4; slot: 1 | 2 | 3 | 4 | null }
   | { type: 'SET_WAVE_HOLDER'; waveId: 1 | 2 | 3 | 4; holder: BrigadeId | 'АРБИТР' }
+  | {
+      type: 'SET_WAVE_MANUAL_OUTCOME';
+      waveId: 1 | 2 | 3 | 4;
+      outcome: 'отбита' | 'пробила';
+    }
   | { type: 'TOGGLE_SLOW_GROUP_MODE' }
   | { type: 'TRIGGER_START_0900' }
   | { type: 'STEP_WAVE_0900' }
@@ -1074,6 +1079,62 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
         w.id === action.waveId ? { ...w, holder: action.holder } : w
       );
       return { ...state, waves };
+    }
+
+    case 'SET_WAVE_MANUAL_OUTCOME': {
+      const nextWaves = state.waves.map((w) => {
+        if (w.id !== action.waveId) return w;
+        const nextSlot = action.outcome === 'отбита' ? w.patchSlotRequired : null;
+        return {
+          ...w,
+          selectedSlot: nextSlot,
+        };
+      });
+
+      const evalResult = evaluateStart0900Waves(nextWaves, 4);
+      const shield = state.shield.map((r) => ({ ...r, unlocked: true }));
+      const targetWave = evalResult.updatedWaves.find((w) => w.id === action.waveId);
+
+      const journalEntry = {
+        id: `j-wave-manual-${Date.now()}`,
+        shiftTime: '09:00',
+        roundNumber: null,
+        actor: `Полоса очереди (${state.mode})`,
+        claimed: `Волна ${action.waveId} (${targetWave?.direction || ''}, держит ${targetWave?.holder || ''}): ${action.outcome.toUpperCase()}`,
+        verified: `Выдано: ${evalResult.issued}/1240 · Потеряно: ${evalResult.lost} чел.`,
+        result: `${evalResult.issued} / 1240`,
+      };
+
+      return {
+        ...state,
+        shield,
+        waves: evalResult.updatedWaves,
+        queue: {
+          ...state.queue,
+          issued: evalResult.issued,
+          lost: evalResult.lost,
+          reported: 26,
+          started: true,
+          completed: true,
+          currentWaveStep: 4,
+          lossReasons: evalResult.lossReasons,
+        },
+        journal: [journalEntry, ...state.journal],
+        lastGesture:
+          action.outcome === 'пробила'
+            ? {
+                type: 'lamp-burn',
+                label: `ВОЛНА ${action.waveId} ПРОБИЛА (−30 ЧЕЛ.)`,
+                outcome: 'ПРОБИЛА',
+                timestamp: Date.now(),
+              }
+            : {
+                type: 'verdict-stamp',
+                label: `ВОЛНА ${action.waveId} УДЕРЖАНА`,
+                outcome: 'ОТБИТА',
+                timestamp: Date.now(),
+              },
+      };
     }
 
     case 'TOGGLE_SLOW_GROUP_MODE': {

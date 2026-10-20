@@ -15,6 +15,10 @@ import {
   WorldId,
 } from '../types/game';
 import { RehearsalTrainerPanel } from './RehearsalTrainerPanel';
+import {
+  AutonomousQueueStrip,
+  ManualVoiceCardBar,
+} from './ManualAutonomousStrip';
 
 interface HostPanelProps {
   state: SessionState;
@@ -133,6 +137,14 @@ export const HostPanel: React.FC<HostPanelProps> = ({
 
       {/* БЛОК КОНТРОЛЬНОГО ПРОГОНА БКП-1 (8 ТОЧЕК ДЛЯ КОМИССИИ) + ТРЕНАЖЁР СПОРНЫХ СИТУАЦИЙ */}
       <RehearsalTrainerPanel state={state} dispatch={dispatch} />
+
+      {/* ПУЛЬТ РЕЖИМОВ «РУЧНОЙ» И «АВТОНОМНЫЙ» (ГОЛОСОВЫЕ КАРТЫ + ПОЛОСА ОЧЕРЕДИ 1 240 ЧЕЛ.) */}
+      {(state.mode === 'РУЧНОЙ' || state.mode === 'АВТОНОМНЫЙ') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <ManualVoiceCardBar state={state} dispatch={dispatch} />
+          <AutonomousQueueStrip state={state} dispatch={dispatch} />
+        </div>
+      )}
 
       {/* СЕТКА УПРАВЛЕНИЯ: 1. Часы урока и фазы · 2. Счёт бригад и Бой 4 по рейтингу */}
       <div

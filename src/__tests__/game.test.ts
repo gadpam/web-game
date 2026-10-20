@@ -566,4 +566,35 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
     expect(getSlideForElapsedSeconds(175).number).toBe(12);
     expect(formatDefenseClock(180)).toBe('3:00');
   });
+
+  it('ведёт полосу очереди 1 240 человек в режиме АВТОНОМНЫЙ / РУЧНОЙ (SET_WAVE_MANUAL_OUTCOME) по ТЗ п. 9', () => {
+    let state = createInitialSession('4826');
+    state = gameReducer(state, { type: 'SET_MODE', mode: 'АВТОНОМНЫЙ' });
+
+    // Пробиваем волну 2 и волну 4 вручную
+    state = gameReducer(state, {
+      type: 'SET_WAVE_MANUAL_OUTCOME',
+      waveId: 2,
+      outcome: 'пробила',
+    });
+    expect(state.queue.issued).toBe(1210);
+    expect(state.queue.lost).toBe(30);
+
+    state = gameReducer(state, {
+      type: 'SET_WAVE_MANUAL_OUTCOME',
+      waveId: 4,
+      outcome: 'пробила',
+    });
+    expect(state.queue.issued).toBe(1180);
+    expect(state.queue.lost).toBe(60);
+
+    // Восстанавливаем волну 4 в статус «отбита»
+    state = gameReducer(state, {
+      type: 'SET_WAVE_MANUAL_OUTCOME',
+      waveId: 4,
+      outcome: 'отбита',
+    });
+    expect(state.queue.issued).toBe(1210);
+    expect(state.queue.lost).toBe(30);
+  });
 });

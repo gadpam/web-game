@@ -21,6 +21,10 @@ import { PracticeWorkbench } from './PracticeWorkbench';
 import { FinalPhasesPanel } from './FinalPhasesPanel';
 import { REHEARSAL_CHECKPOINTS } from '../game/rehearsal';
 import { PolygonFileTreeBar } from './PolygonFileTreeBar';
+import {
+  AutonomousQueueStrip,
+  ManualVoiceCardBar,
+} from './ManualAutonomousStrip';
 
 interface HallScreenProps {
   state: SessionState;
@@ -1167,6 +1171,9 @@ export const HallScreen: React.FC<HallScreenProps> = ({
               className="gesture-plate-rise"
               style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}
             >
+              {(state.mode === 'РУЧНОЙ' || state.mode === 'АВТОНОМНЫЙ') && (
+                <ManualVoiceCardBar state={state} dispatch={dispatch} />
+              )}
               {state.phase === 'lull' && (
                 <div
                   className="material-paper"
@@ -1528,6 +1535,9 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* В режимах РУЧНОЙ и АВТОНОМНЫЙ (или для показа комиссии) выводится полоса ручного ведения очереди 1 240 человек */}
+              <AutonomousQueueStrip state={state} dispatch={dispatch} />
 
               <div
                 style={{
