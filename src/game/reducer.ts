@@ -10,6 +10,7 @@ import {
   computeNominations,
   createInitialSession,
   evaluatePolygonRun,
+  evaluatePracticeSuite,
   evaluateStart0900Waves,
   isShieldComplete,
   syncBrigadeRolesWithBattle,
@@ -28,6 +29,11 @@ import {
   ThemeMode,
   WorldId,
 } from '../types/game';
+import {
+  applyDisputeScenario,
+  applyRehearsalCheckpoint,
+  DisputeScenarioId,
+} from './rehearsal';
 
 export type GameAction =
   | { type: 'SET_PHASE'; phase: PhaseId }
@@ -68,6 +74,15 @@ export type GameAction =
     }
   | { type: 'AWARD_MISSED_SPOT'; note: string }
   | { type: 'START_APPEAL' }
+  | { type: 'TOGGLE_ARBITER_STOP'; reason?: string }
+  | { type: 'TOGGLE_PRACTICE_SLOT'; slot: 1 | 2 | 3 | 4 }
+  | {
+      type: 'UPDATE_PRACTICE_CONFIG';
+      customExceptionName?: string;
+      includeInnerException?: boolean;
+      includeRecordIdProperty?: boolean;
+    }
+  | { type: 'RUN_PRACTICE_SUITE' }
   | {
       type: 'ADJUST_BRIGADE_SCORE';
       brigade: BrigadeId;
@@ -102,6 +117,20 @@ export type GameAction =
       brigade: BrigadeId;
       role: MemberRole;
     }
+  | {
+      type: 'SET_NOMINATION';
+      nomination: 'mostPreciseAnalysis' | 'bestJournal' | 'honestMistake';
+      brigade: BrigadeId;
+    }
+  | {
+      type: 'APPLY_REHEARSAL_CHECKPOINT';
+      checkpointId: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+    }
+  | {
+      type: 'SIMULATE_DISPUTE_SCENARIO';
+      scenarioId: DisputeScenarioId;
+    }
+  | { type: 'IMPORT_SESSION_STATE'; imported: SessionState }
   | { type: 'LOAD_DEMO_1210' }
   | { type: 'RESET_SESSION' };
 
@@ -247,11 +276,12 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       if (!state.timerRunning) return state;
       const bNum = state.currentBattleNumber;
       const battle = state.battles[bNum];
+      if (battle.arbiterStopActive) return state;
+
       const nextPhaseSec = Math.max(0, state.phaseRemainingSec - 1);
       let nextTactSec = Math.max(0, battle.tactRemainingSec - 1);
       let nextTactId = battle.tact;
 
-      // Автоматический переход между тактами боя по таймеру прибора (Документ 01, раздел 4)
       const isBattlePhase = state.phase.startsWith('battle_');
       if (isBattlePhase && nextTactSec === 0) {
         const curIdx = BATTLE_TACTS.findIndex((t) => t.id === battle.tact);
@@ -262,7 +292,6 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
         }
       }
 
-      // В фазе «Пять минут до» (08:55 -> 09:00) обновляем реальные часы смены
       let shiftClock = state.shiftClock;
       if (state.phase === 'five_min') {
         const elapsed = 300 - nextPhaseSec;
@@ -291,24 +320,15 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
     }
 
     case 'SET_MODE': {
-      return {
-        ...state,
-        mode: action.mode,
-      };
+      return { ...state, mode: action.mode };
     }
 
     case 'SET_THEME': {
-      return {
-        ...state,
-        theme: action.theme,
-      };
+      return { ...state, theme: action.theme };
     }
 
     case 'SET_WORLD': {
-      return {
-        ...state,
-        world: action.world,
-      };
+      return { ...state, world: action.world };
     }
 
     case 'TOGGLE_DIM_SCREENS': {
@@ -490,7 +510,7 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
 
       let attackerDelta = 0;
       let defenderDelta = 0;
-      const arbiterDelta = 1; // Арбитр получает +1 за объявленный вердикт (Раздел 8)
+      const arbiterDelta = 1;
 
       if (action.result === 'ПРОБИЛА') {
         attackerDelta = 2 + legalBonus;
@@ -546,19 +566,18 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
         brigades[battle.defender].defensesWon += 1;
       }
 
-      // Открываем соответствующее правило Щита (правило 3 для Боя 1, 4 для Боя 2, 5 для Боя 3, 6 для Боя 4)
       const shieldRuleId = bNum + 2;
       const shield = state.shield.map((r) =>
         r.id === shieldRuleId ? { ...r, unlocked: true } : r
       );
 
-      // Обновляем ротацию Боя 4 по рейтингу после боёв 1–3
       const battles = {
         ...state.battles,
         [bNum]: {
           ...battle,
           verdict,
           tact: 'verdict' as BattleTactId,
+          arbiterStopActive: false,
         },
       };
 
@@ -674,6 +693,110 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       };
     }
 
+    case 'TOGGLE_ARBITER_STOP': {
+      const bNum = state.currentBattleNumber;
+      const battle = state.battles[bNum];
+      const nextStop = !battle.arbiterStopActive;
+      const reason =
+        action.reason?.trim() ||
+        'Спорная формулировка карты — остановка боя арбитром для сверки с кодом';
+
+      const journalEntry = {
+        id: `j-arb-stop-${Date.now()}`,
+        shiftTime: state.shiftClock,
+        roundNumber: bNum,
+        actor: `Арбитр ${battle.arbiter}`,
+        claimed: nextStop
+          ? `Стоп-кран арбитра: ${reason}`
+          : 'Бой возобновлён после разбора спорной карты арбитром',
+        verified: 'Документ 10 (п. 7): право арбитра остановить бой на спорной карте',
+        result: nextStop ? 'СТОП-БОЙ' : 'ПРОДОЛЖЕНИЕ',
+      };
+
+      return {
+        ...state,
+        timerRunning: nextStop ? false : state.timerRunning,
+        battles: {
+          ...state.battles,
+          [bNum]: {
+            ...battle,
+            arbiterStopActive: nextStop,
+            arbiterStopReason: reason,
+          },
+        },
+        journal: [journalEntry, ...state.journal],
+      };
+    }
+
+    case 'TOGGLE_PRACTICE_SLOT': {
+      const exists = state.practice.enabledSlots.includes(action.slot);
+      const enabledSlots = exists
+        ? state.practice.enabledSlots.filter((s) => s !== action.slot)
+        : [...state.practice.enabledSlots, action.slot].sort();
+      return {
+        ...state,
+        practice: {
+          ...state.practice,
+          enabledSlots,
+        },
+      };
+    }
+
+    case 'UPDATE_PRACTICE_CONFIG': {
+      return {
+        ...state,
+        practice: {
+          ...state.practice,
+          customExceptionName:
+            action.customExceptionName !== undefined
+              ? action.customExceptionName
+              : state.practice.customExceptionName,
+          includeInnerException:
+            action.includeInnerException !== undefined
+              ? action.includeInnerException
+              : state.practice.includeInnerException,
+          includeRecordIdProperty:
+            action.includeRecordIdProperty !== undefined
+              ? action.includeRecordIdProperty
+              : state.practice.includeRecordIdProperty,
+        },
+      };
+    }
+
+    case 'RUN_PRACTICE_SUITE': {
+      const res = evaluatePracticeSuite(state.practice);
+      const shield = res.passed
+        ? state.shield.map((r) => ({ ...r, unlocked: true }))
+        : state.shield;
+      const journalEntry = {
+        id: `j-practice-${Date.now()}`,
+        shiftTime: '08:25',
+        roundNumber: null,
+        actor: 'Практика (08:05)',
+        claimed: `Комплексный прогон патча [слоты: ${state.practice.enabledSlots.join(', ')}] + ${state.practice.customExceptionName}`,
+        verified: `Выдано: ${res.issued}/1240 · В отчёт: ${res.reported}/26`,
+        result: res.passed ? 'ПАТЧ ГОТОВ' : 'ДОРАБОТКА',
+      };
+      return {
+        ...state,
+        shield,
+        practice: {
+          ...state.practice,
+          lastSuitePassed: res.passed,
+          lastSuiteIssued: res.issued,
+          lastSuiteReported: res.reported,
+          lastSuiteLog: res.log,
+        },
+        journal: [journalEntry, ...state.journal],
+        lastGesture: {
+          type: 'verdict-stamp',
+          label: res.passed ? 'ПАТЧ ГОТОВ К 09:00' : 'ОШИБКА ПАТЧА',
+          outcome: res.passed ? 'ОТБИТА' : 'ПРОБИЛА',
+          timestamp: Date.now(),
+        },
+      };
+    }
+
     case 'ADJUST_BRIGADE_SCORE': {
       const target = state.brigades[action.brigade];
       const brigades = {
@@ -710,10 +833,7 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       const shield = state.shield.map((r) =>
         r.id === action.ruleId ? { ...r, unlocked: !r.unlocked } : r
       );
-      return {
-        ...state,
-        shield,
-      };
+      return { ...state, shield };
     }
 
     case 'UNLOCK_ALL_SHIELD': {
@@ -887,20 +1007,14 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       const waves = state.waves.map((w) =>
         w.id === action.waveId ? { ...w, selectedSlot: action.slot } : w
       );
-      return {
-        ...state,
-        waves,
-      };
+      return { ...state, waves };
     }
 
     case 'SET_WAVE_HOLDER': {
       const waves = state.waves.map((w) =>
         w.id === action.waveId ? { ...w, holder: action.holder } : w
       );
-      return {
-        ...state,
-        waves,
-      };
+      return { ...state, waves };
     }
 
     case 'TOGGLE_SLOW_GROUP_MODE': {
@@ -921,7 +1035,6 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       const upTo = state.queue.slowGroupMode ? 1 : 4;
       const evalResult = evaluateStart0900Waves(state.waves, upTo);
 
-      // Если какая-то волна пробила, гасим одну лампу у ответственной бригады
       const brigades = {
         TRY: { ...state.brigades.TRY, lamps: [...state.brigades.TRY.lamps] as [boolean, boolean, boolean, boolean] },
         CATCH: { ...state.brigades.CATCH, lamps: [...state.brigades.CATCH.lamps] as [boolean, boolean, boolean, boolean] },
@@ -1025,7 +1138,6 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
     }
 
     case 'JOIN_PLAYER': {
-      // Повторный вход с той же бригадой и ролью вытесняет предыдущую сессию (Документ 06, п. 4)
       const filtered = state.players.filter(
         (p) => !(p.brigade === action.brigade && p.role === action.role)
       );
@@ -1043,27 +1155,52 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       };
     }
 
+    case 'SET_NOMINATION': {
+      return {
+        ...state,
+        nominations: {
+          ...state.nominations,
+          [action.nomination]: action.brigade,
+        },
+      };
+    }
+
+    case 'APPLY_REHEARSAL_CHECKPOINT': {
+      return applyRehearsalCheckpoint(state, action.checkpointId);
+    }
+
+    case 'SIMULATE_DISPUTE_SCENARIO': {
+      return applyDisputeScenario(state, action.scenarioId);
+    }
+
+    case 'IMPORT_SESSION_STATE': {
+      if (!action.imported || !action.imported.brigades) return state;
+      return {
+        ...action.imported,
+        theme: state.theme,
+      };
+    }
+
     case 'LOAD_DEMO_1210': {
-      // Эталонное состояние из Документа 05 и 07: «Билетов выдано: 1210 из 1240, пробито: волна 2 (порядок обработчиков)»
       const base = createInitialSession(state.code);
       const shield = base.shield.map((r) => ({ ...r, unlocked: true }));
       const brigades = {
         TRY: {
           ...base.brigades.TRY,
-          score: 7,
+          score: 14,
           attacksWon: 2,
           defensesWon: 2,
         },
         CATCH: {
           ...base.brigades.CATCH,
-          score: 6,
+          score: 12,
           lamps: [true, true, true, false] as [boolean, boolean, boolean, boolean],
           attacksWon: 1,
           defensesWon: 2,
         },
         FINALLY: {
           ...base.brigades.FINALLY,
-          score: 5,
+          score: 11,
           attacksWon: 1,
           defensesWon: 1,
         },

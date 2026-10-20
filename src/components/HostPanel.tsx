@@ -14,13 +14,21 @@ import {
   SessionState,
   WorldId,
 } from '../types/game';
+import { RehearsalTrainerPanel } from './RehearsalTrainerPanel';
 
 interface HostPanelProps {
   state: SessionState;
   dispatch: (action: GameAction) => void;
+  onOpenProjectorWindow?: () => void;
+  syncedWindowCount?: number;
 }
 
-export const HostPanel: React.FC<HostPanelProps> = ({ state, dispatch }) => {
+export const HostPanel: React.FC<HostPanelProps> = ({
+  state,
+  dispatch,
+  onOpenProjectorWindow,
+  syncedWindowCount = 1,
+}) => {
   const [scoreReason, setScoreReason] = useState(
     'Ручная корректировка ведущим смены'
   );
@@ -75,6 +83,17 @@ export const HostPanel: React.FC<HostPanelProps> = ({ state, dispatch }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {onOpenProjectorWindow && (
+            <button
+              type="button"
+              onClick={onOpenProjectorWindow}
+              className="instrument-btn btn-action"
+              title="Открыть чистый Экран зала во втором окне браузера для вывода на проектор (синхронизируется через BroadcastChannel даже без сети)"
+            >
+              Открыть окно проектора ↗ (Окон: {syncedWindowCount})
+            </button>
+          )}
+
           <button
             type="button"
             onClick={() => dispatch({ type: 'TOGGLE_DIM_SCREENS' })}
@@ -111,6 +130,9 @@ export const HostPanel: React.FC<HostPanelProps> = ({ state, dispatch }) => {
           </button>
         </div>
       </div>
+
+      {/* БЛОК КОНТРОЛЬНОГО ПРОГОНА БКП-1 (8 ТОЧЕК ДЛЯ КОМИССИИ) + ТРЕНАЖЁР СПОРНЫХ СИТУАЦИЙ */}
+      <RehearsalTrainerPanel state={state} dispatch={dispatch} />
 
       {/* СЕТКА УПРАВЛЕНИЯ: 1. Часы урока и фазы · 2. Счёт бригад и Бой 4 по рейтингу */}
       <div

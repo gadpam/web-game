@@ -1,29 +1,17 @@
 import {
-  BATTLE_TACTS,
   INITIAL_SHIELD_RULES,
   KNOWN_EXCEPTION_TYPES,
-  PHASES,
-  POLYGON_FILES,
-  PROLOGUE_MINES,
 } from './constants';
 import {
-  AppMode,
   BattleRole,
   BattleRound,
-  BattleTactId,
   Brigade,
   BrigadeId,
-  Card,
   JournalEntry,
-  MemberRole,
-  PhaseId,
-  PolygonFileId,
+  PracticeState,
   RunResult,
   SessionState,
-  ThemeMode,
-  Verdict,
   WaveState,
-  WorldId,
 } from '../types/game';
 
 const NUMBER_WORDS: Record<number, string> = {
@@ -107,6 +95,8 @@ export function createInitialBattles(): Record<1 | 2 | 3 | 4, BattleRound> {
       appealUsed: false,
       appealRemainingSec: 30,
       missedSpotAwarded: false,
+      arbiterStopActive: false,
+      arbiterStopReason: '',
       probedCount: 0,
       repelledCount: 0,
     },
@@ -138,6 +128,8 @@ export function createInitialBattles(): Record<1 | 2 | 3 | 4, BattleRound> {
       appealUsed: false,
       appealRemainingSec: 30,
       missedSpotAwarded: false,
+      arbiterStopActive: false,
+      arbiterStopReason: '',
       probedCount: 0,
       repelledCount: 0,
     },
@@ -169,6 +161,8 @@ export function createInitialBattles(): Record<1 | 2 | 3 | 4, BattleRound> {
       appealUsed: false,
       appealRemainingSec: 30,
       missedSpotAwarded: false,
+      arbiterStopActive: false,
+      arbiterStopReason: '',
       probedCount: 0,
       repelledCount: 0,
     },
@@ -200,6 +194,8 @@ export function createInitialBattles(): Record<1 | 2 | 3 | 4, BattleRound> {
       appealUsed: false,
       appealRemainingSec: 30,
       missedSpotAwarded: false,
+      arbiterStopActive: false,
+      arbiterStopReason: '',
       probedCount: 0,
       repelledCount: 0,
     },
@@ -267,6 +263,19 @@ export function createInitialWaves(): WaveState[] {
   ];
 }
 
+export function createInitialPracticeState(): PracticeState {
+  return {
+    enabledSlots: [1, 2],
+    customExceptionName: 'TicketBookingException',
+    includeInnerException: true,
+    includeRecordIdProperty: true,
+    lastSuitePassed: null,
+    lastSuiteIssued: 0,
+    lastSuiteReported: 0,
+    lastSuiteLog: [],
+  };
+}
+
 export function createInitialSession(code = '4826'): SessionState {
   const brigades = createInitialBrigades();
   const battles = createInitialBattles();
@@ -326,6 +335,7 @@ export function createInitialSession(code = '4826'): SessionState {
       batchRepelled: false,
       secondWaveTriggered: false,
     },
+    practice: createInitialPracticeState(),
     waves: createInitialWaves(),
     queue: {
       total: 1240,
@@ -353,12 +363,6 @@ export interface CardValidationResult {
   reason?: string;
 }
 
-/**
- * Проверяет формулировку карты по разделу 5 документа 01 (Регламент игры):
- * 1. Ссылка на строку обязательна (line > 0).
- * 2. Тип называется точно («Ошибка» — не тип, FormatException — тип).
- * 3. Одно конкретное утверждение (не пустое обещание и не многословное рассуждение).
- */
 export function validateCardInput(input: {
   line: number | null | undefined;
   exceptionType: string;
@@ -424,9 +428,40 @@ export function validateCardInput(input: {
   return { valid: true };
 }
 
-/**
- * Запускает полигон «Партер» на очереди из 1 240 записей (1 214 штатных + 26 мин).
- */
+export function validateJournalEntry(input: {
+  claimed: string;
+  verified: string;
+}): CardValidationResult {
+  const claimed = (input.claimed || '').trim();
+  const verified = (input.verified || '').trim();
+
+  if (claimed.length < 6) {
+    return {
+      valid: false,
+      reason:
+        'Правило журнала (Документ 07, п. 4): укажите конкретно, что было заявлено (строка или тип).',
+    };
+  }
+
+  const forbiddenPhrases = [
+    'обсудили и решили',
+    'всё нормально',
+    'поговорили',
+    'исправили ошибку',
+    'сделали задание',
+  ];
+  const combined = `${claimed} ${verified}`.toLowerCase();
+  if (forbiddenPhrases.some((p) => combined.includes(p))) {
+    return {
+      valid: false,
+      reason:
+        'Правило журнала: «Обсудили и решили» — не запись. Запись должна позволять восстановить бой через сутки без свидетелей (строка, тип, результат запуска).',
+    };
+  }
+
+  return { valid: true };
+}
+
 export function evaluatePolygonRun(
   battleNumber: 1 | 2 | 3 | 4,
   appliedSlots: number[],
@@ -440,7 +475,6 @@ export function evaluatePolygonRun(
   const now = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   if (battleNumber === 1) {
-    // Бой 1 «Перехват» (Booking.cs:12 и контратака на :14)
     if (!hasSlot1) {
       return {
         id: `run-${Date.now()}`,
@@ -529,7 +563,6 @@ export function evaluatePolygonRun(
   }
 
   if (battleNumber === 2) {
-    // Бой 2 «Порядок» (Pricing.cs:23-27, CS0160)
     if (!hasSlot2) {
       return {
         id: `run-${Date.now()}`,
@@ -587,7 +620,6 @@ export function evaluatePolygonRun(
   }
 
   if (battleNumber === 3) {
-    // Бой 3 «Гарантия» (Seats.cs:40-43, пул соединений и finally)
     if (!hasSlot3) {
       return {
         id: `run-${Date.now()}`,
@@ -645,7 +677,6 @@ export function evaluatePolygonRun(
     };
   }
 
-  // Бой 4 «Честность» (Promo.cs:55 и :58)
   if (!hasSlot4) {
     return {
       id: `run-${Date.now()}`,
@@ -704,9 +735,61 @@ export function evaluatePolygonRun(
 }
 
 /**
- * Формирует дословную устную формулу арбитра по разделу 7 документа 01:
- * «Бой первый. Атака на строку четырнадцать. Запуск: пробила. Атакующим — два. Защите — ноль. Журнал: ...»
+ * Оценивает комплексный прогон фазы «08:05 Практика — сборка своего патча» (все 4 рубежа + свой класс исключения).
  */
+export function evaluatePracticeSuite(practice: PracticeState): {
+  passed: boolean;
+  issued: number;
+  reported: number;
+  log: string[];
+} {
+  const log: string[] = [];
+  const has1 = practice.enabledSlots.includes(1);
+  const has2 = practice.enabledSlots.includes(2);
+  const has3 = practice.enabledSlots.includes(3);
+  const has4 = practice.enabledSlots.includes(4);
+  const validName = /Exception$/i.test(practice.customExceptionName.trim());
+
+  log.push(`[08:18:00] СТРЕСС-ПРОГОН ПРАКТИКИ: 1 240 записей (4 волны одновременно)...`);
+
+  if (!has1) {
+    log.push(`[ОШИБКА РУБЕЖА 1] Отсутствует try внутри цикла пакета -> остановка на записи #0x1F3 (FormatException).`);
+    return { passed: false, issued: 18, reported: 0, log };
+  }
+  log.push(`[РУБЕЖ 1 ОК] Перехват внутри цикла удерживает конвейер на плаву.`);
+
+  if (!has2) {
+    log.push(`[ОШИБКА РУБЕЖА 2] Нарушен порядок иерархии catch -> CS0160 (DivideByZeroException перекрыт общим Exception).`);
+    return { passed: false, issued: 0, reported: 0, log };
+  }
+  log.push(`[РУБЕЖ 2 ОК] Иерархия от частного к общему соблюдена без CS0160.`);
+
+  if (!has3) {
+    log.push(`[ОШИБКА РУБЕЖА 3] Нет блока finally { conn.Close(); } -> пул из 64 соединений исчерпан на записи #312.`);
+    return { passed: false, issued: 312, reported: 8, log };
+  }
+  log.push(`[РУБЕЖ 3 ОК] Блок finally освобождает все 1 240 соединений при падении и при return.`);
+
+  if (!has4) {
+    log.push(`[ОШИБКА РУБЕЖА 4] Пустой catch {} проглотил 26 мин, в отчёте 0 записей.`);
+    return { passed: false, issued: 1214, reported: 0, log };
+  }
+  log.push(`[РУБЕЖ 4 ОК] Все 26 подозрительных записей переданы в отчёт с сохранением стека (throw;).`);
+
+  if (!validName || !practice.includeInnerException || !practice.includeRecordIdProperty) {
+    log.push(
+      `[ДОМЕННОЕ ИСКЛЮЧЕНИЕ] Проверьте класс ${practice.customExceptionName}: требуется суффикс *Exception, свойство RecordId и передача innerException.`
+    );
+    return { passed: false, issued: 1214, reported: 26, log };
+  }
+
+  log.push(
+    `[ДОМЕННЫЙ ТИП ОК] Собственный класс ${practice.customExceptionName} : Exception сохраняет RecordId и InnerException.`
+  );
+  log.push(`[ИТОГ ПРАКТИКИ] ПАТЧ ГОТОВ К 09:00: билетов 1214 · в отчёте 26 · утечек 0.`);
+  return { passed: true, issued: 1214, reported: 26, log };
+}
+
 export function buildArbiterOralFormula(params: {
   battleNumber: 1 | 2 | 3 | 4;
   targetLine: number;
@@ -725,11 +808,6 @@ export function buildArbiterOralFormula(params: {
   return `Бой ${battleWord}. Атака на строку ${params.targetLine}. Запуск: ${resWord}. Атакующим — ${params.attackerDelta}. Защите — ${params.defenderDelta}. Журнал: ${params.journalLine}`;
 }
 
-/**
- * Пересчитывает распределение ролей на Бой 4 по рейтингу (сумма очков за бои 1–3).
- * Первая по рейтингу бригада получает право выбора (по умолчанию — атака или защита),
- * вторая — оппонент, третья — арбитр.
- */
 export function computeBattle4RolesByRating(
   brigades: Record<BrigadeId, Brigade>,
   leaderPreferredRole: BattleRole = 'ЗАЩИТА'
@@ -776,15 +854,6 @@ export function getUnlockedShieldCount(state: SessionState): number {
   return state.shield.filter((r) => r.unlocked).length;
 }
 
-/**
- * Рассчитывает итог старта в 09:00 по 4 волнам (Документ 05, раздел 4):
- * Каждая пробитая волна стоит очереди ровно 30 человек без билета:
- * 0 пробито -> 1240 / 1240
- * 1 пробита -> 1210 / 1240
- * 2 пробиты -> 1180 / 1240
- * 3 пробиты -> 1150 / 1240
- * 4 пробиты -> 1120 / 1240
- */
 export function evaluateStart0900Waves(
   waves: WaveState[],
   upToWaveCount = 4

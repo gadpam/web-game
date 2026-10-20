@@ -30,6 +30,9 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
     refAttack?.arbiterMissedSpotHint ||
       'Пропуск: int.TryParse дешевле исключения на потоке из 1240 запросов'
   );
+  const [stopReason, setStopReason] = useState(
+    'Спорная карта: сверка номера строки и типа исключения на полигоне'
+  );
 
   useEffect(() => {
     const hint = REFERENCE_CARDS.find(
@@ -86,7 +89,7 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
         gap: '14px',
       }}
     >
-      {/* Шапка Панели Арбитра */}
+      {/* Шапка Панели Арбитра + Стоп-кран боя на спорной карте */}
       <div
         className="material-armor screw-corners"
         style={{
@@ -112,7 +115,34 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            type="button"
+            disabled={activeBattle.appealUsed}
+            onClick={() => dispatch({ type: 'START_APPEAL' })}
+            className="instrument-btn btn-action"
+            title="Апелляция докладчика: 30 секунд, одна на бой (Документ 01, п. 7)"
+          >
+            {activeBattle.appealUsed
+              ? `Апелляция (${activeBattle.appealRemainingSec} с)`
+              : 'Апелляция 30 с'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              dispatch({ type: 'TOGGLE_ARBITER_STOP', reason: stopReason })
+            }
+            className={`instrument-btn ${
+              activeBattle.arbiterStopActive ? 'btn-incident' : 'btn-warning'
+            }`}
+            title="Право арбитра остановить таймер боя на спорной карте (Документ 10, п. 7)"
+          >
+            {activeBattle.arbiterStopActive
+              ? 'Снять СТОП-БОЙ и продолжить'
+              : 'СТОП-БОЙ на спорной карте'}
+          </button>
+
           {([1, 2, 3, 4] as const).map((bNum) => (
             <button
               key={bNum}
@@ -130,7 +160,7 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
         </div>
       </div>
 
-      {/* КАРТЫ ОБЕИХ СТОРОН РЯДОМ (Раздел 5.3 Документа 06) */}
+      {/* КАРТЫ ОБЕИХ СТОРОН РЯДОМ */}
       <div
         style={{
           display: 'grid',
@@ -138,7 +168,6 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
           gap: '14px',
         }}
       >
-        {/* Карта атакующей стороны */}
         <div
           className="material-paper"
           style={{
@@ -226,7 +255,6 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
           )}
         </div>
 
-        {/* Карта защищающейся стороны */}
         <div
           className="material-paper"
           style={{
@@ -316,7 +344,7 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
         </div>
       </div>
 
-      {/* ЖИВОЙ ЗАПУСК ПОЛИГОНА («Код — единственный судья») */}
+      {/* ЖИВОЙ ЗАПУСК ПОЛИГОНА */}
       <div className="material-armor screw-corners" style={{ padding: '14px 18px' }}>
         <div
           style={{
@@ -455,7 +483,6 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
             />
           </div>
 
-          {/* Предпросмотр устной формулы арбитра */}
           <div
             style={{
               padding: '10px 12px',
@@ -475,7 +502,6 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
             </div>
           </div>
 
-          {/* Три кнопки вердикта: ПРОБИЛА [Y] / ОТБИТА [N] / НЕ ПРИНЯТА */}
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -532,7 +558,6 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
             </button>
           </div>
 
-          {/* Причина отклонения карты */}
           <div>
             <label
               style={{
@@ -617,6 +642,26 @@ export const ArbiterPanel: React.FC<ArbiterPanelProps> = ({
                 padding: '8px 10px',
               }}
             />
+
+            <div style={{ marginTop: '10px' }}>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '13px',
+                  color: 'var(--text-caption)',
+                  marginBottom: '4px',
+                }}
+              >
+                Формулировка для Стоп-крана на спорной карте:
+              </label>
+              <input
+                type="text"
+                value={stopReason}
+                onChange={(e) => setStopReason(e.target.value)}
+                className="instrument-btn mono"
+                style={{ width: '100%', fontSize: '13px' }}
+              />
+            </div>
           </div>
 
           <button

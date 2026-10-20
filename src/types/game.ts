@@ -74,7 +74,7 @@ export interface Brigade {
   shapeSymbol: '▲' | '⬡' | '■';
   subtitle: string;
   score: number;
-  lamps: [boolean, boolean, boolean, boolean]; // 4 fuse lamps
+  lamps: [boolean, boolean, boolean, boolean];
   battleRole: BattleRole;
   assignedWave: WaveDirection;
   attacksWon: number;
@@ -166,18 +166,18 @@ export interface WaveState {
   patchSlotRequired: 1 | 2 | 3 | 4;
   selectedSlot: 1 | 2 | 3 | 4 | null;
   status: 'ожидание' | 'идёт' | 'отбита' | 'пробила';
-  lostPeople: number; // 0 or 30
+  lostPeople: number;
 }
 
 export interface QueueState {
-  total: number; // 1240
+  total: number;
   issued: number;
   lost: number;
   reported: number;
   started: boolean;
   completed: boolean;
-  slowGroupMode: boolean; // волны по одной с паузой 30 с
-  currentWaveStep: number; // 0..4
+  slowGroupMode: boolean;
+  currentWaveStep: number;
   lossReasons: string[];
 }
 
@@ -209,6 +209,8 @@ export interface BattleRound {
   appealUsed: boolean;
   appealRemainingSec: number;
   missedSpotAwarded: boolean;
+  arbiterStopActive: boolean;
+  arbiterStopReason: string;
   probedCount: number;
   repelledCount: number;
 }
@@ -221,7 +223,7 @@ export interface PrologueState {
   };
   pollRevealed: boolean;
   batchCrashed: boolean;
-  matchedMines: Record<string, string>; // mineId -> exceptionType
+  matchedMines: Record<string, string>;
   hierarchyShown: boolean;
   mechanismParts: {
     TRY: boolean;
@@ -230,6 +232,17 @@ export interface PrologueState {
   };
   batchRepelled: boolean;
   secondWaveTriggered: boolean;
+}
+
+export interface PracticeState {
+  enabledSlots: number[]; // 1..4
+  customExceptionName: string; // e.g. TicketBookingException
+  includeInnerException: boolean;
+  includeRecordIdProperty: boolean;
+  lastSuitePassed: boolean | null;
+  lastSuiteIssued: number;
+  lastSuiteReported: number;
+  lastSuiteLog: string[];
 }
 
 export interface SessionState {
@@ -253,6 +266,7 @@ export interface SessionState {
   currentBattleNumber: 1 | 2 | 3 | 4;
   battles: Record<1 | 2 | 3 | 4, BattleRound>;
   prologue: PrologueState;
+  practice: PracticeState;
   waves: WaveState[];
   queue: QueueState;
   journal: JournalEntry[];
@@ -267,4 +281,21 @@ export interface SessionState {
     outcome?: 'ПРОБИЛА' | 'ОТБИТА';
     timestamp: number;
   } | null;
+}
+
+export interface PolygonFileLine {
+  line: number;
+  code: string;
+  vulnerable?: boolean;
+  battleTag?: 1 | 2 | 3 | 4;
+  humanNote?: string;
+  exceptionHint?: string;
+}
+
+export interface PolygonFileSpec {
+  id: PolygonFileId;
+  title: string;
+  subtitle: string;
+  battleNumber: 1 | 2 | 3 | 4;
+  lines: PolygonFileLine[];
 }

@@ -1,7 +1,6 @@
 import React from 'react';
 import { WORLD_PRESETS } from '../game/constants';
 import { getUnlockedShieldCount } from '../game/engine';
-import { GameAction } from '../game/reducer';
 import {
   AppMode,
   BrigadeId,
@@ -14,236 +13,231 @@ import {
 interface TopInstrumentBarProps {
   state: SessionState;
   activeScreen: ScreenView;
-  setActiveScreen: (screen: ScreenView) => void;
+  onSelectScreen: (screen: ScreenView) => void;
   activeBrigade: BrigadeId;
   activeRole: MemberRole;
+  onOpenLogin: () => void;
+  onChangeMode: (mode: AppMode) => void;
+  onChangeTheme: (theme: ThemeMode) => void;
+  onLoadDemoPreset: () => void;
+  onOpenEmergencyMenu: () => void;
   wsConnected: boolean;
+  syncedWindowCount: number;
   soundEnabled: boolean;
   onToggleSound: () => void;
-  onOpenLogin: () => void;
-  onOpenEmergency: () => void;
-  dispatch: (action: GameAction) => void;
+  onToggleProjectorMode: () => void;
+  onOpenProjectorWindow: () => void;
 }
+
+const SCREEN_TABS: { id: ScreenView; label: string; subtitle: string }[] = [
+  { id: 'hall', label: 'Экран зала', subtitle: 'Проектор 62/38' },
+  { id: 'brigade', label: 'Клиент бригады', subtitle: 'Карта + Полигон' },
+  { id: 'arbiter', label: 'Панель арбитра', subtitle: 'Вердикт + Журнал' },
+  { id: 'host', label: 'Панель ведущего', subtitle: 'Таймер + Скрипт' },
+  { id: 'materials', label: 'Материалы смены', subtitle: 'А4 + 12 слайдов' },
+];
 
 export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
   state,
   activeScreen,
-  setActiveScreen,
+  onSelectScreen,
   activeBrigade,
   activeRole,
+  onOpenLogin,
+  onChangeMode,
+  onChangeTheme,
+  onLoadDemoPreset,
+  onOpenEmergencyMenu,
   wsConnected,
+  syncedWindowCount,
   soundEnabled,
   onToggleSound,
-  onOpenLogin,
-  onOpenEmergency,
-  dispatch,
+  onToggleProjectorMode,
+  onOpenProjectorWindow,
 }) => {
   const worldMeta = WORLD_PRESETS[state.world];
   const shieldCount = getUnlockedShieldCount(state);
-
-  const screens: { id: ScreenView; label: string; sub: string }[] = [
-    { id: 'hall', label: 'Экран зала', sub: 'проектор 62/38' },
-    { id: 'brigade', label: 'Клиент бригады', sub: `${activeBrigade} · ${activeRole}` },
-    { id: 'arbiter', label: 'Панель арбитра', sub: 'вердикт Y/N' },
-    { id: 'host', label: 'Панель ведущего', sub: 'фазы и суфлёр' },
-    { id: 'materials', label: 'Протокол и Защита', sub: 'A4 + 11 док.' },
-  ];
-
-  const modes: AppMode[] = ['ПОЛНЫЙ', 'РУЧНОЙ', 'АВТОНОМНЫЙ'];
-  const themes: { id: ThemeMode; label: string }[] = [
-    { id: 'night', label: 'Ночная смена' },
-    { id: 'light', label: 'Светлый прибор' },
-    { id: 'paper', label: 'Бумажный штаб' },
-  ];
 
   return (
     <header
       className="material-armor no-print"
       style={{
         padding: '8px 16px',
-        display: 'flex',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '10px',
-        borderRadius: 0,
         borderLeft: 'none',
         borderRight: 'none',
+        borderTop: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '10px',
       }}
     >
-      {/* Левый блок: марка прибора, код партии, статус связи */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span
-            className="brass-nameplate"
-            style={{ fontSize: '15px', padding: '4px 10px' }}
-          >
-            АПТАЙМ · НОЧНАЯ СМЕНА
-          </span>
-          <span
-            style={{
-              fontSize: '13px',
-              color: 'var(--text-secondary)',
-              fontWeight: 600,
-            }}
-          >
-            {worldMeta.serviceName}
-          </span>
+      {/* Левая колодка: шильдик прибора + код партии + статус канала и окон */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div
+          className="brass-nameplate"
+          title="Учебная игра-расследование по обработке исключений C#"
+        >
+          <span>▲⬡■</span>
+          <span>АПТАЙМ · {worldMeta.serviceName.toUpperCase()}</span>
         </div>
+
+        <button
+          type="button"
+          onClick={onOpenLogin}
+          className="instrument-btn mono"
+          title="Вход по 4-значному коду партии и выбор бригады/роли"
+          style={{ padding: '5px 10px' }}
+        >
+          <span style={{ color: 'var(--text-caption)' }}>КОД:</span>
+          <strong style={{ color: 'var(--color-warning)', fontSize: '15px' }}>
+            {state.code}
+          </strong>
+          <span style={{ color: 'var(--text-secondary)' }}>
+            [{activeBrigade} · {activeRole}]
+          </span>
+        </button>
 
         <div
           className="mono"
           style={{
-            padding: '4px 10px',
-            background: 'rgba(0,0,0,0.35)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '13px',
+            color: 'var(--text-secondary)',
+            padding: '4px 8px',
             border: '1px solid var(--border-metal)',
             borderRadius: '2px',
-            fontSize: '14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
           }}
-          title="4-значный код партии для входа бригад и арбитра"
+          title={
+            wsConnected
+              ? 'Синхронизация с сервером партии и между окнами активна'
+              : 'Автономный локальный контур (BroadcastChannel + localStorage между окнами без сети)'
+          }
         >
-          <span style={{ color: 'var(--text-caption)' }}>КОД ПАРТИИ:</span>
-          <strong style={{ color: 'var(--color-warning)', fontSize: '16px', letterSpacing: '0.12em' }}>
-            {state.code}
-          </strong>
           <span
-            style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor:
-                state.mode === 'АВТОНОМНЫЙ'
-                  ? 'var(--color-warning)'
-                  : wsConnected
-                  ? 'var(--color-stable)'
-                  : 'var(--color-action)',
-              display: 'inline-block',
-            }}
+            className={`fuse-lamp ${
+              wsConnected || syncedWindowCount > 1 ? 'lamp-on' : 'lamp-warn'
+            }`}
+            style={{ width: '8px', height: '8px' }}
           />
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            ЩИТ {shieldCount}/6
-          </span>
+          <span>{wsConnected ? 'СЕТЬ ОК' : 'АВТОНОМ'}</span>
+          <span>·</span>
+          <span>ОКОН: {syncedWindowCount}</span>
+          <span>·</span>
+          <span>ЩИТ {shieldCount}/6</span>
         </div>
       </div>
 
-      {/* Центральный блок: переключение экранов */}
-      <nav style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-        {screens.map((scr) => {
-          const active = activeScreen === scr.id;
+      {/* Центральная колодка: переключение 5 экранов ТЗ */}
+      <nav
+        aria-label="Экраны приложения Аптайм"
+        style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}
+      >
+        {SCREEN_TABS.map((tab) => {
+          const isActive = activeScreen === tab.id;
           return (
             <button
-              key={scr.id}
+              key={tab.id}
               type="button"
-              onClick={() => setActiveScreen(scr.id)}
-              className={`instrument-btn ${active ? 'btn-action' : ''}`}
+              onClick={() => onSelectScreen(tab.id)}
+              className={`instrument-btn ${isActive ? 'btn-action' : ''}`}
               style={{
-                padding: '6px 12px',
+                padding: '6px 11px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-start',
                 gap: '1px',
               }}
             >
-              <span style={{ fontSize: '14px', fontWeight: 700 }}>{scr.label}</span>
+              <span style={{ fontSize: '13px', fontWeight: 800 }}>
+                {tab.label}
+              </span>
               <span
-                className="mono"
-                style={{ fontSize: '13px', color: 'var(--text-caption)', fontWeight: 400 }}
+                style={{
+                  fontSize: '13px',
+                  color: isActive ? 'var(--color-action)' : 'var(--text-caption)',
+                  fontWeight: 500,
+                }}
               >
-                {scr.sub}
+                {tab.subtitle}
               </span>
             </button>
           );
         })}
       </nav>
 
-      {/* Правый блок: Режим (Полный/Ручной/Автономный), Тема, Звук, Вход, Демо */}
+      {/* Правая колодка: Режим, Тема, Звук, Проектор [F], Окно проектора ↗, Демо 1210/1240, Esc */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <div
-          style={{
-            display: 'flex',
-            border: '1px solid var(--border-metal)',
-            borderRadius: '3px',
-            overflow: 'hidden',
-          }}
-          title="Переключение режима проведения в один клик без потери состояния"
+        <select
+          aria-label="Режим работы приложения"
+          value={state.mode}
+          onChange={(e) => onChangeMode(e.target.value as AppMode)}
+          className="instrument-btn mono"
+          style={{ padding: '6px 8px' }}
         >
-          {modes.map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => dispatch({ type: 'SET_MODE', mode: m })}
-              style={{
-                background:
-                  state.mode === m ? 'var(--color-action)' : 'var(--bg-card)',
-                color: state.mode === m ? '#04101c' : 'var(--text-secondary)',
-                border: 'none',
-                padding: '6px 9px',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
+          <option value="ПОЛНЫЙ">Режим: ПОЛНЫЙ</option>
+          <option value="РУЧНОЙ">Режим: РУЧНОЙ</option>
+          <option value="АВТОНОМНЫЙ">Режим: АВТОНОМНЫЙ</option>
+        </select>
 
         <select
-          aria-label="Тема оформления"
+          aria-label="Тема оформления прибора"
           value={state.theme}
-          onChange={(e) =>
-            dispatch({ type: 'SET_THEME', theme: e.target.value as ThemeMode })
-          }
+          onChange={(e) => onChangeTheme(e.target.value as ThemeMode)}
           className="instrument-btn"
-          style={{ padding: '6px 10px', fontSize: '13px' }}
+          style={{ padding: '6px 8px' }}
         >
-          {themes.map((t) => (
-            <option key={t.id} value={t.id}>
-              Тема: {t.label}
-            </option>
-          ))}
+          <option value="night">Тема: Ночная смена</option>
+          <option value="light">Тема: Светлый прибор</option>
+          <option value="paper">Тема: Бумажный штаб</option>
         </select>
 
         <button
           type="button"
           onClick={onToggleSound}
-          className="instrument-btn"
-          style={{ fontSize: '13px' }}
-          title="Звук реле и штампов приборной панели"
+          className={`instrument-btn mono ${soundEnabled ? 'btn-stable' : ''}`}
+          title="Щелчки тумблеров и сигнал старта 09:00 (Web Audio API)"
         >
-          Звук: {soundEnabled ? 'ВКЛ' : 'ВЫКЛ'}
+          {soundEnabled ? 'ЗВУК ВКЛ' : 'ЗВУК ВЫКЛ'}
         </button>
 
         <button
           type="button"
-          onClick={onOpenLogin}
+          onClick={onToggleProjectorMode}
           className="instrument-btn"
-          style={{ fontSize: '13px' }}
+          title="Чистый проекторный режим без верхней панели в текущем окне [F]"
         >
-          Роль / Код
+          Проектор [F]
         </button>
 
         <button
           type="button"
-          onClick={() => dispatch({ type: 'LOAD_DEMO_1210' })}
+          onClick={onOpenProjectorWindow}
+          className="instrument-btn btn-action"
+          title="Открыть второе синхронизированное окно в режиме чистого Экрана зала для вывода на проектор (работает и без сети)"
+        >
+          Окно проектора ↗
+        </button>
+
+        <button
+          type="button"
+          onClick={onLoadDemoPreset}
           className="instrument-btn btn-warning"
-          style={{ fontSize: '13px' }}
-          title="Загрузить эталонный финал 1210 / 1240 из документов 05 и 07"
+          title="Загрузить эталонное состояние 08:58 (1210 из 1240, 14/12/11 очков) для комиссии"
         >
-          Итог 1210/1240
+          Демо 1210/1240
         </button>
 
         <button
           type="button"
-          onClick={onOpenEmergency}
+          onClick={onOpenEmergencyMenu}
           className="instrument-btn btn-incident"
-          style={{ fontSize: '13px' }}
-          title="Аварийное меню смены (клавиша Esc)"
+          title="Аварийное меню переключения режима (Esc)"
         >
-          Авар. [Esc]
+          Авария [Esc]
         </button>
       </div>
     </header>
