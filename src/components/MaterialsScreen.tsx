@@ -8,6 +8,7 @@ import { KIT_DOCUMENTS } from '../game/kitDocuments';
 import { GameAction } from '../game/reducer';
 import { SessionState } from '../types/game';
 import { DefenseDeckPanel } from './DefenseDeckPanel';
+import { RoleRotationMatrix } from './RoleRotationMatrix';
 
 interface MaterialsScreenProps {
   state: SessionState;
@@ -914,6 +915,12 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
               </div>
             </div>
           </div>
+
+          <RoleRotationMatrix
+            state={state}
+            activeBrigade="TRY"
+            showAllBrigadesDefault
+          />
         </div>
       )}
 

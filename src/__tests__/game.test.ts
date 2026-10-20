@@ -29,6 +29,11 @@ import {
   getSlideForElapsedSeconds,
   getTimingSegmentForElapsedSeconds,
 } from '../game/defenseDeck';
+import {
+  getMemberRoleForBattle,
+  getMemberSlotForRole,
+  verifyRotationMatrixInvariants,
+} from '../game/roleRotation';
 
 describe('АПТАЙМ · Ночная смена — Ядро и Регламент (Документы 00–11)', () => {
   it('содержит все 11 документов комплекта «Аптайм» (от 00 до 11)', () => {
@@ -596,5 +601,21 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
     });
     expect(state.queue.issued).toBe(1210);
     expect(state.queue.lost).toBe(30);
+  });
+
+  it('гарантирует жёсткую ротацию 6 ролей × 4 боя для 18 участников без совмещений и без повторов (Регламент, п. 2)', () => {
+    const check = verifyRotationMatrixInvariants();
+    expect(check.valid).toBe(true);
+    expect(check.totalParticipants).toBe(18);
+    expect(check.collisionsInBattle).toBe(0);
+    expect(check.repeatsAcrossBattles).toBe(0);
+
+    // Обратимость отображения дежурный <-> роль в каждом из 4 боёв
+    for (const battleNum of [1, 2, 3, 4] as const) {
+      for (const slot of [1, 2, 3, 4, 5, 6] as const) {
+        const role = getMemberRoleForBattle(slot, battleNum);
+        expect(getMemberSlotForRole(role, battleNum)).toBe(slot);
+      }
+    }
   });
 });

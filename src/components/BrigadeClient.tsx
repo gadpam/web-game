@@ -16,6 +16,7 @@ import {
 import { PracticeWorkbench } from './PracticeWorkbench';
 import { PrologueWorkbench } from './PrologueWorkbench';
 import { PolygonFileTreeBar } from './PolygonFileTreeBar';
+import { RoleRotationMatrix } from './RoleRotationMatrix';
 
 type CardType = 'атака' | 'защита' | 'контратака';
 
@@ -75,6 +76,7 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
     reason?: string;
   } | null>(null);
   const [showPracticeTab, setShowPracticeTab] = useState(false);
+  const [showRotationMatrix, setShowRotationMatrix] = useState(false);
   const [prologueOverride, setPrologueOverride] = useState<'auto' | 'show' | 'hide'>('auto');
 
   const isProloguePhase = state.phase.startsWith('prologue_');
@@ -220,6 +222,14 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
           ))}
           <button
             type="button"
+            onClick={() => setShowRotationMatrix((prev) => !prev)}
+            className={`instrument-btn ${showRotationMatrix ? 'btn-action' : ''}`}
+            title="Показать / скрыть матрицу ротации 6 ролей × 4 боя (Документ 01, п. 2)"
+          >
+            Ротация 6 ролей (18 чел.)
+          </button>
+          <button
+            type="button"
             onClick={() => {
               setShowPracticeTab(false);
               setPrologueOverride((prev) =>
@@ -246,6 +256,16 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
           </button>
         </div>
       </div>
+
+      {showRotationMatrix && (
+        <RoleRotationMatrix
+          state={state}
+          activeBrigade={activeBrigade}
+          activeRole={activeRole}
+          onSelectBrigade={onSelectBrigade}
+          onSelectRole={onSelectRole}
+        />
+      )}
 
       {/* Оверлей приглушения экранов на время Доклада стоя / Вердикта (Документ 00, п. 10) */}
       {state.screensDimmedForStandingReport && (
