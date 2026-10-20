@@ -8,7 +8,6 @@ import {
 import { getUnlockedShieldCount, isShieldComplete } from '../game/engine';
 import { GameAction } from '../game/reducer';
 import {
-  AppMode,
   BattleRole,
   BrigadeId,
   SessionState,
@@ -28,6 +27,8 @@ interface HostPanelProps {
   syncedWindowCount?: number;
 }
 
+type HostDeckTab = 'teleprompter' | 'bkp' | 'lexicon';
+
 export const HostPanel: React.FC<HostPanelProps> = ({
   state,
   dispatch,
@@ -37,6 +38,9 @@ export const HostPanel: React.FC<HostPanelProps> = ({
   const [scoreReason, setScoreReason] = useState(
     'Ручная корректировка ведущим смены'
   );
+  const [deckTab, setDeckTab] = useState<HostDeckTab>('teleprompter');
+  const [showAll19Lines, setShowAll19Lines] = useState(false);
+
   const activeBattle = state.battles[state.currentBattleNumber];
   const shieldReady = isShieldComplete(state);
   const shieldCount = getUnlockedShieldCount(state);
@@ -46,32 +50,45 @@ export const HostPanel: React.FC<HostPanelProps> = ({
     0
   );
 
+  const currentSceneNum =
+    state.phase === 'prologue_1'
+      ? 1
+      : state.phase === 'prologue_2'
+      ? 2
+      : state.phase === 'prologue_3'
+      ? 3
+      : 4;
+
+  const visibleScriptLines = showAll19Lines
+    ? TEACHER_SCRIPT_19
+    : TEACHER_SCRIPT_19.filter((l) => l.scene === currentSceneNum);
+
   return (
     <div
       style={{
-        padding: '14px 18px',
+        padding: '12px 16px',
         display: 'flex',
         flexDirection: 'column',
-        gap: '14px',
+        gap: '12px',
       }}
     >
       {/* Верхний блок: Режимы проведения, код партии, погасить экраны, мир */}
       <div
         className="material-armor screw-corners"
         style={{
-          padding: '14px 18px',
+          padding: '10px 16px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: '12px',
+          gap: '10px',
         }}
       >
         <div>
-          <div style={{ fontSize: '13px', color: 'var(--text-caption)', fontWeight: 700 }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-caption)', fontWeight: 700 }}>
             ПАНЕЛЬ ВЕДУЩЕГО СМЕНЫ · ИСТОЧНИК ИСТИНЫ: СЕРВЕР СОСТОЯНИЯ
           </div>
-          <div style={{ fontSize: '20px', fontWeight: 900, marginTop: '2px' }}>
+          <div style={{ fontSize: '18px', fontWeight: 900, marginTop: '2px' }}>
             Код партии:{' '}
             <span className="mono" style={{ color: 'var(--color-warning)' }}>
               {state.code}
@@ -87,15 +104,15 @@ export const HostPanel: React.FC<HostPanelProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           {onOpenProjectorWindow && (
             <button
               type="button"
               onClick={onOpenProjectorWindow}
               className="instrument-btn btn-action"
-              title="Открыть чистый Экран зала во втором окне браузера для вывода на проектор (синхронизируется через BroadcastChannel даже без сети)"
+              title="Открыть чистый Экран зала во втором окне браузера для вывода на проектор"
             >
-              Открыть окно проектора ↗ (Окон: {syncedWindowCount})
+              Окно проектора ↗ (Окон: {syncedWindowCount})
             </button>
           )}
 
@@ -107,8 +124,8 @@ export const HostPanel: React.FC<HostPanelProps> = ({
             }`}
           >
             {state.screensDimmedForStandingReport
-              ? 'Экраны бригад: ПРИГЛУШЕНЫ (Доклад стоя)'
-              : 'Приглушить экраны бригад (Доклад стоя)'}
+              ? 'Экраны бригад: ПРИГЛУШЕНЫ'
+              : 'Приглушить экраны (Доклад стоя)'}
           </button>
 
           <select
@@ -131,46 +148,43 @@ export const HostPanel: React.FC<HostPanelProps> = ({
             onClick={() => dispatch({ type: 'LOAD_DEMO_1210' })}
             className="instrument-btn btn-stable"
           >
-            Загрузить эталон 1210/1240
+            Эталон 1210/1240
           </button>
         </div>
       </div>
 
-      {/* БЛОК КОНТРОЛЬНОГО ПРОГОНА БКП-1 (8 ТОЧЕК ДЛЯ КОМИССИИ) + ТРЕНАЖЁР СПОРНЫХ СИТУАЦИЙ */}
-      <RehearsalTrainerPanel state={state} dispatch={dispatch} />
-
-      {/* ПРИБОРНАЯ ЛЕНТА 5 ШАГОВ ОТКРЫТИЯ ПОНЯТИЯ (1. НУЖДА -> 5. ИМЯ) */}
-      <DidacticCycleStrip state={state} dispatch={dispatch} />
+      {/* КОМПАКТНАЯ ПРИБОРНАЯ ЛЕНТА 5 ШАГОВ ОТКРЫТИЯ ПОНЯТИЯ (1. НУЖДА -> 5. ИМЯ) */}
+      <DidacticCycleStrip state={state} dispatch={dispatch} compact />
 
       {/* ПУЛЬТ РЕЖИМОВ «РУЧНОЙ» И «АВТОНОМНЫЙ» (ГОЛОСОВЫЕ КАРТЫ + ПОЛОСА ОЧЕРЕДИ 1 240 ЧЕЛ.) */}
       {(state.mode === 'РУЧНОЙ' || state.mode === 'АВТОНОМНЫЙ') && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <ManualVoiceCardBar state={state} dispatch={dispatch} />
           <AutonomousQueueStrip state={state} dispatch={dispatch} />
         </div>
       )}
 
-      {/* СЕТКА УПРАВЛЕНИЯ: 1. Часы урока и фазы · 2. Счёт бригад и Бой 4 по рейтингу */}
+      {/* ОСНОВНОЙ ПУЛЬТ УПРАВЛЕНИЯ: 1. Часы урока и фазы · 2. Счёт бригад и старт 09:00 */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '55fr 45fr',
-          gap: '14px',
+          gridTemplateColumns: '56fr 44fr',
+          gap: '12px',
         }}
       >
         {/* 1. Управление фазами 90-минутного урока и 6 тактами боя */}
         <div
           className="material-armor screw-corners"
-          style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+          style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}
         >
-          <div style={{ fontSize: '15px', fontWeight: 800 }}>
+          <div style={{ fontSize: '14px', fontWeight: 800 }}>
             ЧАСЫ УРОКА (90 МИНУТ · 03:00 → 09:15) · ПЕРЕКЛЮЧЕНИЕ ФАЗ
           </div>
 
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
               gap: '6px',
             }}
           >
@@ -185,7 +199,7 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                   style={{
                     flexDirection: 'column',
                     alignItems: 'flex-start',
-                    padding: '7px 10px',
+                    padding: '6px 9px',
                   }}
                 >
                   <div
@@ -193,7 +207,7 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                       display: 'flex',
                       justifyContent: 'space-between',
                       width: '100%',
-                      fontSize: '13px',
+                      fontSize: '12px',
                     }}
                   >
                     <span className="mono" style={{ color: 'var(--color-warning)' }}>
@@ -203,7 +217,7 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                       {p.realTimeSpan}
                     </span>
                   </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, marginTop: '2px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, marginTop: '1px' }}>
                     {p.shortTitle}
                   </div>
                 </button>
@@ -214,15 +228,15 @@ export const HostPanel: React.FC<HostPanelProps> = ({
           {/* Управление 6 тактами активного боя */}
           <div
             style={{
-              marginTop: '6px',
-              paddingTop: '10px',
+              marginTop: '4px',
+              paddingTop: '8px',
               borderTop: '1px solid var(--border-metal)',
             }}
           >
-            <div style={{ fontSize: '14px', fontWeight: 800, marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 800, marginBottom: '6px' }}>
               ТАКТЫ БОЯ {activeBattle.number} «{activeBattle.codeName}» (8 МИНУТ):
             </div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
               {BATTLE_TACTS.map((t) => (
                 <button
                   key={t.id}
@@ -231,6 +245,7 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                   className={`instrument-btn ${
                     activeBattle.tact === t.id ? 'btn-warning' : ''
                   }`}
+                  style={{ fontSize: '12.5px', padding: '5px 9px' }}
                 >
                   {t.title} ({t.durationSec} с)
                 </button>
@@ -242,9 +257,9 @@ export const HostPanel: React.FC<HostPanelProps> = ({
         {/* 2. Ручная правка счёта бригад, штраф за подсказку из зала, ротация Боя 4 */}
         <div
           className="material-armor screw-corners"
-          style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}
+          style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}
         >
-          <div style={{ fontSize: '15px', fontWeight: 800 }}>
+          <div style={{ fontSize: '14px', fontWeight: 800 }}>
             СЧЁТ БРИГАД И ПРАВКА С ЗАПИСЬЮ В ЖУРНАЛ
           </div>
 
@@ -254,39 +269,39 @@ export const HostPanel: React.FC<HostPanelProps> = ({
             onChange={(e) => setScoreReason(e.target.value)}
             placeholder="Причина корректировки для журнала смены"
             className="instrument-btn mono"
-            style={{ width: '100%' }}
+            style={{ width: '100%', fontSize: '12.5px' }}
           />
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {(['TRY', 'CATCH', 'FINALLY'] as BrigadeId[]).map((bId) => {
               const b = state.brigades[bId];
               return (
                 <div
                   key={bId}
                   style={{
-                    padding: '10px 12px',
+                    padding: '8px 10px',
                     background: 'rgba(0,0,0,0.32)',
                     border: '1px solid var(--border-metal)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     flexWrap: 'wrap',
-                    gap: '8px',
+                    gap: '6px',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span className="brass-nameplate">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className="brass-nameplate" style={{ fontSize: '13px' }}>
                       {b.shapeSymbol} {b.name}
                     </span>
-                    <span className="mono" style={{ fontSize: '24px', fontWeight: 900 }}>
+                    <span className="mono" style={{ fontSize: '21px', fontWeight: 900 }}>
                       {b.score} очк.
                     </span>
-                    <span className="mono" style={{ fontSize: '13px', color: 'var(--text-caption)' }}>
+                    <span className="mono" style={{ fontSize: '12px', color: 'var(--text-caption)' }}>
                       [{b.battleRole}]
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
                     <button
                       type="button"
                       onClick={() =>
@@ -298,6 +313,7 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                         })
                       }
                       className="instrument-btn btn-stable"
+                      style={{ padding: '4px 8px', fontSize: '12px' }}
                     >
                       +1
                     </button>
@@ -312,6 +328,7 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                         })
                       }
                       className="instrument-btn btn-stable"
+                      style={{ padding: '4px 8px', fontSize: '12px' }}
                     >
                       +2
                     </button>
@@ -326,8 +343,9 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                         })
                       }
                       className="instrument-btn btn-incident"
+                      style={{ padding: '4px 8px', fontSize: '12px' }}
                     >
-                      −1 Подсказка из зала
+                      −1 Подсказка
                     </button>
                   </div>
                 </div>
@@ -338,18 +356,15 @@ export const HostPanel: React.FC<HostPanelProps> = ({
           {/* Выбор роли лидером рейтинга для Боя 4 */}
           <div
             style={{
-              padding: '10px 12px',
+              padding: '8px 10px',
               background: 'rgba(255, 176, 32, 0.1)',
               border: '1px solid var(--color-warning)',
             }}
           >
-            <div style={{ fontSize: '13px', fontWeight: 800 }}>
-              БОЙ 4 «ЧЕСТНОСТЬ» — РОЛИ ПО РЕЙТИНГУ (СУММА ОЧКОВ ЗА БОИ 1–3)
+            <div style={{ fontSize: '12.5px', fontWeight: 800 }}>
+              БОЙ 4 «ЧЕСТНОСТЬ» — РОЛИ ПО РЕЙТИНГУ (БОИ 1–3)
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-              Первая по рейтингу бригада выбирает себе роль на Бой 4:
-            </div>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '6px', marginTop: '5px', flexWrap: 'wrap' }}>
               {(['АТАКА', 'ЗАЩИТА', 'АРБИТР'] as BattleRole[]).map((r) => (
                 <button
                   key={r}
@@ -358,8 +373,9 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                     dispatch({ type: 'SET_BATTLE4_LEADER_ROLE', role: r })
                   }
                   className="instrument-btn"
+                  style={{ padding: '4px 8px', fontSize: '12px' }}
                 >
-                  Лидер выбирает: {r}
+                  Лидер: {r}
                 </button>
               ))}
             </div>
@@ -377,22 +393,23 @@ export const HostPanel: React.FC<HostPanelProps> = ({
               borderTop: '1px solid var(--border-metal)',
             }}
           >
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={state.queue.slowGroupMode}
                 onChange={() => dispatch({ type: 'TOGGLE_SLOW_GROUP_MODE' })}
               />
-              <span style={{ fontSize: '13px' }}>
-                Режим «Слабая группа» (волны старта по одной с паузой 30 с)
+              <span style={{ fontSize: '12.5px' }}>
+                Режим «Слабая группа» (+30 с)
               </span>
             </label>
 
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px' }}>
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'UNLOCK_ALL_SHIELD' })}
                 className="instrument-btn btn-warning"
+                style={{ fontSize: '12px', padding: '5px 9px' }}
               >
                 Щит 6/6 ({shieldCount}/6)
               </button>
@@ -401,6 +418,7 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                 disabled={!shieldReady}
                 onClick={() => dispatch({ type: 'TRIGGER_START_0900' })}
                 className="instrument-btn btn-stable"
+                style={{ fontSize: '12px', padding: '5px 9px' }}
               >
                 Аварийный СТАРТ 09:00
               </button>
@@ -409,57 +427,120 @@ export const HostPanel: React.FC<HostPanelProps> = ({
         </div>
       </div>
 
-      {/* ДОСЛОВНЫЙ СЦЕНАРИЙ ВЕДУЩЕГО (19 РЕПЛИК · 124 СЛОВА <= 130 СЛОВ) + ЗАПРЕЩЁННЫЕ СЛОВА */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '64fr 36fr',
-          gap: '14px',
-        }}
-      >
-        <div className="material-paper" style={{ padding: '14px 18px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '8px',
-            }}
-          >
-            <span style={{ fontSize: '14px', fontWeight: 800 }}>
-              ДОСЛОВНЫЙ СУФЛЁР ЗАВЯЗКИ (ДОКУМЕНТ 03 · 19 РЕПЛИК · {totalScriptWords} СЛОВ
-              ИЗ 130 МАКС.)
-            </span>
-            <span className="mono" style={{ fontSize: '13px', color: 'var(--color-stable)' }}>
-              ЛИМИТ ВЫДЕРЖАН ({totalScriptWords} ≤ 130)
-            </span>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '6px 16px',
-            }}
-          >
-            {TEACHER_SCRIPT_19.map((line) => (
-              <div key={line.number} style={{ fontSize: '13px' }}>
-                <span className="mono" style={{ color: 'var(--color-warning)' }}>
-                  #{line.number} [Сц.{line.scene}]
-                </span>{' '}
-                <strong>«{line.words}»</strong>{' '}
-                <span style={{ color: 'var(--text-caption)' }}>({line.cue})</span>
-              </div>
-            ))}
+      {/* НИЖНЯЯ КАССЕТА ИНСТРУМЕНТОВ ВЕДУЩЕГО (3 ЧИСТЫЕ ВКЛАДКИ ВМЕСТО НАГРОМОЖДЕНИЯ) */}
+      <div className="material-armor screw-corners" style={{ padding: '12px 16px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '8px',
+            borderBottom: '1px solid var(--border-metal)',
+            paddingBottom: '8px',
+            marginBottom: '10px',
+          }}
+        >
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setDeckTab('teleprompter')}
+              className={`instrument-btn ${deckTab === 'teleprompter' ? 'btn-action' : ''}`}
+            >
+              1. Живой суфлёр реплик (Док. 03)
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeckTab('bkp')}
+              className={`instrument-btn ${deckTab === 'bkp' ? 'btn-warning' : ''}`}
+            >
+              2. Прогон БКП-1 и Спорные ситуации (Т1–Т8)
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeckTab('lexicon')}
+              className={`instrument-btn ${deckTab === 'lexicon' ? 'btn-stable' : ''}`}
+            >
+              3. Язык мира: Запрещённые слова → Замены
+            </button>
           </div>
         </div>
 
-        {/* Словарь смены: Запрещённые слова и замены (Документ 03, раздел 7) */}
-        <div className="material-armor" style={{ padding: '14px 16px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 800, marginBottom: '8px' }}>
-            ЯЗЫК МИРА: ЗАПРЕЩЁННЫЕ СЛОВА И ЗАМЕНЫ
+        {deckTab === 'teleprompter' && (
+          <div className="material-paper" style={{ padding: '12px 16px' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                marginBottom: '8px',
+              }}
+            >
+              <span style={{ fontSize: '13.5px', fontWeight: 800 }}>
+                ДОСЛОВНЫЙ СУФЛЁР ВЕДУЩЕГО (ДОКУМЕНТ 03 · 19 РЕПЛИК · {totalScriptWords} СЛОВ ≤ 130)
+              </span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAll19Lines((p) => !p)}
+                  className="instrument-btn"
+                  style={{ fontSize: '12px', padding: '3px 8px' }}
+                >
+                  {showAll19Lines
+                    ? `Показать только Сцену ${currentSceneNum}`
+                    : 'Показать все 19 реплик'}
+                </button>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: showAll19Lines ? '1fr 1fr' : '1fr',
+                gap: '6px 16px',
+              }}
+            >
+              {visibleScriptLines.map((line) => (
+                <div
+                  key={line.number}
+                  className="terminal-stream-line"
+                  style={{
+                    fontSize: showAll19Lines ? '13px' : '16px',
+                    padding: showAll19Lines ? '2px 0' : '6px 10px',
+                    background: showAll19Lines ? 'transparent' : 'rgba(0,0,0,0.22)',
+                    borderLeft: showAll19Lines
+                      ? 'none'
+                      : '3px solid var(--color-warning)',
+                  }}
+                >
+                  <span className="mono" style={{ color: 'var(--color-warning)' }}>
+                    #{line.number} [Сц.{line.scene}]
+                  </span>{' '}
+                  <strong>«{line.words}»</strong>{' '}
+                  <span style={{ color: 'var(--text-caption)', fontSize: '13px' }}>
+                    ({line.cue})
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
+        )}
+
+        {deckTab === 'bkp' && (
+          <RehearsalTrainerPanel state={state} dispatch={dispatch} />
+        )}
+
+        {deckTab === 'lexicon' && (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
+              gap: '8px',
+              fontSize: '13.5px',
+            }}
+          >
             {[
               ['калькулятор', 'сервис, служба «Партер»'],
               ['хакер / взломал', 'тот, кто вошёл; атакующий; red team'],
@@ -475,20 +556,29 @@ export const HostPanel: React.FC<HostPanelProps> = ({
                 style={{
                   display: 'flex',
                   justifyContent: 'space-between',
-                  borderBottom: '1px solid var(--border-metal)',
-                  paddingBottom: '4px',
+                  padding: '8px 10px',
+                  background: 'rgba(0,0,0,0.28)',
+                  border: '1px solid var(--border-metal)',
                 }}
               >
-                <span style={{ color: 'var(--color-incident)', textDecoration: 'line-through' }}>
+                <span
+                  style={{
+                    color: 'var(--color-incident)',
+                    textDecoration: 'line-through',
+                  }}
+                >
                   {bad}
                 </span>
-                <span className="mono" style={{ color: 'var(--color-stable)', fontWeight: 700 }}>
+                <span
+                  className="mono"
+                  style={{ color: 'var(--color-stable)', fontWeight: 700 }}
+                >
                   → {good}
                 </span>
               </div>
             ))}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

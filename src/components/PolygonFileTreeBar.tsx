@@ -12,9 +12,8 @@ interface PolygonFileTreeBarProps {
 export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
   state,
   dispatch,
-  compact = false,
 }) => {
-  const [showTreeMap, setShowTreeMap] = useState(!compact);
+  const [showTreeMap, setShowTreeMap] = useState(false);
   const worldPolygonFiles = getWorldPolygonFiles(state.world);
   const treeSpec = getPolygonTreeNodes(state.world);
   const currentPolygonSpec = worldPolygonFiles[state.selectedPolygonFile];
@@ -27,18 +26,25 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {/* Строка быстрого переключения 5 файлов + тумблер дерева ТЗ п. 7 */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {/* Компактная приборная полоса вкладок 5 файлов полигона */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '8px',
+          gap: '6px',
         }}
       >
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '5px',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+          }}
+        >
           {(Object.keys(worldPolygonFiles) as PolygonFileId[]).map((fileId) => {
             const spec = worldPolygonFiles[fileId];
             const active = state.selectedPolygonFile === fileId;
@@ -48,16 +54,16 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
                 type="button"
                 onClick={() => handleSelectFile(fileId)}
                 className={`instrument-btn mono ${active ? 'btn-action' : ''}`}
-                style={{ fontSize: '14px' }}
+                style={{ padding: '5px 10px', fontSize: '13px' }}
               >
                 <span>{fileId}</span>
                 <span
                   style={{
-                    fontSize: '13px',
-                    color: active ? 'var(--text-main)' : 'var(--text-caption)',
+                    fontSize: '11.5px',
+                    color: active ? 'var(--color-action)' : 'var(--text-caption)',
                   }}
                 >
-                  [Бой {spec.battleNumber}]
+                  ·Б{spec.battleNumber}
                 </span>
               </button>
             );
@@ -66,16 +72,17 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
             type="button"
             onClick={() => setShowTreeMap((prev) => !prev)}
             className={`instrument-btn ${showTreeMap ? 'btn-warning' : ''}`}
-            style={{ fontSize: '13px' }}
-            title="Показать / скрыть схему дерева модулей по Документу 06, п. 7"
+            style={{ padding: '5px 9px', fontSize: '12px' }}
+            title="Показать / скрыть схему дерева 5 модулей по Документу 06, п. 7"
           >
-            {showTreeMap ? 'Скрыть дерево модулей' : 'Дерево полигона (5 файлов)'}
+            Дерево 5 файлов {showTreeMap ? '▴' : '▾'}
           </button>
         </div>
 
         <span
+          className="mono"
           style={{
-            fontSize: '13px',
+            fontSize: '12.5px',
             color: 'var(--text-secondary)',
           }}
         >
@@ -83,15 +90,15 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
         </span>
       </div>
 
-      {/* Схема дерева из 5 файлов по Документу 06, п. 7 */}
+      {/* Сворачиваемая схема дерева из 5 файлов по Документу 06, п. 7 */}
       {showTreeMap && (
         <div
-          className="material-armor"
+          className="material-armor gesture-card-drop"
           style={{
-            padding: '10px 14px',
+            padding: '8px 12px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '4px',
+            gap: '6px',
           }}
         >
           <div
@@ -101,13 +108,22 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: '8px',
-              marginBottom: '2px',
             }}
           >
-            <span className="mono" style={{ fontSize: '15px', fontWeight: 900, color: 'var(--color-warning)' }}>
-              {treeSpec.rootTitle} (Документ 06, п. 7 · клик открывает модуль и уязвимую строку)
+            <span
+              className="mono"
+              style={{
+                fontSize: '13px',
+                fontWeight: 900,
+                color: 'var(--color-warning)',
+              }}
+            >
+              {treeSpec.rootTitle} (Документ 06, п. 7)
             </span>
-            <span className="mono" style={{ fontSize: '13px', color: 'var(--text-caption)' }}>
+            <span
+              className="mono"
+              style={{ fontSize: '12px', color: 'var(--text-caption)' }}
+            >
               Модулей: 5 · Слотов патчей: 4 (клавиши 1–4)
             </span>
           </div>
@@ -115,15 +131,15 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
-              gap: '6px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gap: '5px',
             }}
           >
             {treeSpec.nodes.map((node) => {
               const isSelected = state.selectedPolygonFile === node.fileId;
-              const isSlotActive = state.battles[state.currentBattleNumber].activeSlots.includes(
-                node.battleNumber
-              );
+              const isSlotActive = state.battles[
+                state.currentBattleNumber
+              ].activeSlots.includes(node.battleNumber);
               return (
                 <button
                   key={node.fileId}
@@ -133,7 +149,8 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
                   style={{
                     justifyContent: 'space-between',
                     textAlign: 'left',
-                    padding: '6px 10px',
+                    padding: '5px 8px',
+                    fontSize: '12.5px',
                     borderColor: isSelected
                       ? 'var(--color-action)'
                       : isSlotActive
@@ -144,12 +161,27 @@ export const PolygonFileTreeBar: React.FC<PolygonFileTreeBarProps> = ({
                       : 'rgba(0, 0, 0, 0.25)',
                   }}
                 >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span style={{ color: 'var(--text-caption)' }}>{node.branchPrefix}</span>
-                    <strong style={{ color: isSelected ? 'var(--color-action)' : 'var(--text-main)' }}>
+                  <span
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <span style={{ color: 'var(--text-caption)' }}>
+                      {node.branchPrefix}
+                    </span>
+                    <strong
+                      style={{
+                        color: isSelected
+                          ? 'var(--color-action)'
+                          : 'var(--text-main)',
+                      }}
+                    >
                       {node.fileId}
                     </strong>
-                    <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    <span
+                      style={{
+                        fontSize: '12px',
+                        color: 'var(--text-secondary)',
+                      }}
+                    >
                       {node.shortDesc}
                     </span>
                   </span>

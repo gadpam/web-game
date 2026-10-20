@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { WORLD_PRESETS } from '../game/constants';
 import { getUnlockedShieldCount } from '../game/engine';
 import {
@@ -29,12 +29,12 @@ interface TopInstrumentBarProps {
   onOpenProjectorWindow: () => void;
 }
 
-const SCREEN_TABS: { id: ScreenView; label: string; subtitle: string }[] = [
-  { id: 'hall', label: 'Экран зала', subtitle: 'Проектор 62/38' },
-  { id: 'brigade', label: 'Клиент бригады', subtitle: 'Карта + Полигон' },
-  { id: 'arbiter', label: 'Панель арбитра', subtitle: 'Вердикт + Журнал' },
-  { id: 'host', label: 'Панель ведущего', subtitle: 'Таймер + Скрипт' },
-  { id: 'materials', label: 'Материалы смены', subtitle: 'А4 + 12 слайдов' },
+const SCREEN_TABS: { id: ScreenView; label: string; hotkey: string }[] = [
+  { id: 'hall', label: 'Экран зала', hotkey: 'F1' },
+  { id: 'brigade', label: 'Клиент бригады', hotkey: 'F2' },
+  { id: 'arbiter', label: 'Панель арбитра', hotkey: 'F3' },
+  { id: 'host', label: 'Панель ведущего', hotkey: 'F4' },
+  { id: 'materials', label: 'Материалы смены', hotkey: 'F5' },
 ];
 
 export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
@@ -55,6 +55,7 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
   onToggleProjectorMode,
   onOpenProjectorWindow,
 }) => {
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const worldMeta = WORLD_PRESETS[state.world];
   const shieldCount = getUnlockedShieldCount(state);
 
@@ -62,7 +63,7 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
     <header
       className="material-armor no-print"
       style={{
-        padding: '8px 16px',
+        padding: '6px 14px',
         borderLeft: 'none',
         borderRight: 'none',
         borderTop: 'none',
@@ -70,11 +71,13 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
         alignItems: 'center',
         justifyContent: 'space-between',
         flexWrap: 'wrap',
-        gap: '10px',
+        gap: '8px',
+        position: 'relative',
+        zIndex: 40,
       }}
     >
-      {/* Левая колодка: шильдик прибора + код партии + статус канала и окон */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* Левая колодка: шильдик прибора + код партии + компактный индикатор связи */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div
           className="brass-nameplate"
           title="Учебная игра-расследование по обработке исключений C#"
@@ -88,14 +91,14 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
           onClick={onOpenLogin}
           className="instrument-btn mono"
           title="Вход по 4-значному коду партии и выбор бригады/роли"
-          style={{ padding: '5px 10px' }}
+          style={{ padding: '4px 9px', fontSize: '13px' }}
         >
-          <span style={{ color: 'var(--text-caption)' }}>КОД:</span>
-          <strong style={{ color: 'var(--color-warning)', fontSize: '15px' }}>
+          <span style={{ color: 'var(--text-caption)' }}>КОД</span>
+          <strong style={{ color: 'var(--color-warning)', fontSize: '14px' }}>
             {state.code}
           </strong>
           <span style={{ color: 'var(--text-secondary)' }}>
-            [{activeBrigade} · {activeRole}]
+            · {activeBrigade} ({activeRole})
           </span>
         </button>
 
@@ -105,9 +108,10 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
             display: 'inline-flex',
             alignItems: 'center',
             gap: '6px',
-            fontSize: '13px',
+            fontSize: '12px',
             color: 'var(--text-secondary)',
-            padding: '4px 8px',
+            padding: '3px 8px',
+            background: 'rgba(0,0,0,0.28)',
             border: '1px solid var(--border-metal)',
             borderRadius: '2px',
           }}
@@ -121,20 +125,30 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
             className={`fuse-lamp ${
               wsConnected || syncedWindowCount > 1 ? 'lamp-on' : 'lamp-warn'
             }`}
-            style={{ width: '8px', height: '8px' }}
+            style={{ width: '9px', height: '9px' }}
           />
-          <span>{wsConnected ? 'СЕТЬ ОК' : 'АВТОНОМ'}</span>
+          <span>{state.mode}</span>
           <span>·</span>
-          <span>ОКОН: {syncedWindowCount}</span>
+          <span>ОКОН:{syncedWindowCount}</span>
           <span>·</span>
-          <span>ЩИТ {shieldCount}/6</span>
+          <span
+            style={{
+              color:
+                shieldCount === 6
+                  ? 'var(--color-stable)'
+                  : 'var(--color-warning)',
+              fontWeight: 800,
+            }}
+          >
+            ЩИТ {shieldCount}/6
+          </span>
         </div>
       </div>
 
-      {/* Центральная колодка: переключение 5 экранов ТЗ */}
+      {/* Центральная колодка: 5 чистых однострочных клавиш экранов */}
       <nav
         aria-label="Экраны приложения Аптайм"
-        style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}
+        style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}
       >
         {SCREEN_TABS.map((tab) => {
           const isActive = activeScreen === tab.id;
@@ -145,101 +159,200 @@ export const TopInstrumentBar: React.FC<TopInstrumentBarProps> = ({
               onClick={() => onSelectScreen(tab.id)}
               className={`instrument-btn ${isActive ? 'btn-action' : ''}`}
               style={{
-                padding: '6px 11px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                gap: '1px',
+                padding: '5px 11px',
+                fontSize: '13px',
               }}
             >
-              <span style={{ fontSize: '13px', fontWeight: 800 }}>
-                {tab.label}
-              </span>
               <span
+                className="mono"
                 style={{
-                  fontSize: '13px',
+                  fontSize: '11px',
                   color: isActive ? 'var(--color-action)' : 'var(--text-caption)',
-                  fontWeight: 500,
                 }}
               >
-                {tab.subtitle}
+                {tab.hotkey}
               </span>
+              <span style={{ fontWeight: 800 }}>{tab.label}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* Правая колодка: Режим, Тема, Звук, Проектор [F], Окно проектора ↗, Демо 1210/1240, Esc */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <select
-          aria-label="Режим работы приложения"
-          value={state.mode}
-          onChange={(e) => onChangeMode(e.target.value as AppMode)}
-          className="instrument-btn mono"
-          style={{ padding: '6px 8px' }}
-        >
-          <option value="ПОЛНЫЙ">Режим: ПОЛНЫЙ</option>
-          <option value="РУЧНОЙ">Режим: РУЧНОЙ</option>
-          <option value="АВТОНОМНЫЙ">Режим: АВТОНОМНЫЙ</option>
-        </select>
-
-        <select
-          aria-label="Тема оформления прибора"
-          value={state.theme}
-          onChange={(e) => onChangeTheme(e.target.value as ThemeMode)}
-          className="instrument-btn"
-          style={{ padding: '6px 8px' }}
-        >
-          <option value="night">Тема: Ночная смена</option>
-          <option value="light">Тема: Светлый прибор</option>
-          <option value="paper">Тема: Бумажный штаб</option>
-        </select>
-
-        <button
-          type="button"
-          onClick={onToggleSound}
-          className={`instrument-btn mono ${soundEnabled ? 'btn-stable' : ''}`}
-          title="Щелчки тумблеров и сигнал старта 09:00 (Web Audio API)"
-        >
-          {soundEnabled ? 'ЗВУК ВКЛ' : 'ЗВУК ВЫКЛ'}
-        </button>
-
+      {/* Правая колодка: всего 2 аккуратные клавиши (Проектор и выдвижной Пульт) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <button
           type="button"
           onClick={onToggleProjectorMode}
           className="instrument-btn"
-          title="Чистый проекторный режим без верхней панели в текущем окне [F]"
+          style={{ padding: '5px 10px', fontSize: '12.5px' }}
+          title="Чистый проекторный режим без верхней шапки [F]"
         >
           Проектор [F]
         </button>
 
         <button
           type="button"
-          onClick={onOpenProjectorWindow}
-          className="instrument-btn btn-action"
-          title="Открыть второе синхронизированное окно в режиме чистого Экрана зала для вывода на проектор (работает и без сети)"
+          onClick={() => setDrawerOpen((p) => !p)}
+          className={`instrument-btn ${drawerOpen ? 'btn-warning' : ''}`}
+          style={{ padding: '5px 10px', fontSize: '12.5px' }}
+          title="Открыть служебный пульт: режим, тема, звук, демо-пресет 1210/1240, второе окно"
         >
-          Окно проектора ↗
-        </button>
-
-        <button
-          type="button"
-          onClick={onLoadDemoPreset}
-          className="instrument-btn btn-warning"
-          title="Загрузить эталонное состояние 08:58 (1210 из 1240, 14/12/11 очков) для комиссии"
-        >
-          Демо 1210/1240
-        </button>
-
-        <button
-          type="button"
-          onClick={onOpenEmergencyMenu}
-          className="instrument-btn btn-incident"
-          title="Аварийное меню переключения режима (Esc)"
-        >
-          Авария [Esc]
+          ⚙ Пульт {drawerOpen ? '▴' : '▾'}
         </button>
       </div>
+
+      {/* Выдвижная приборная кассета служебных настроек (не загромождает сцену) */}
+      {drawerOpen && (
+        <div
+          className="material-armor gesture-card-drop"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            right: '14px',
+            padding: '12px 14px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+            minWidth: '340px',
+            zIndex: 80,
+            border: '1px solid var(--color-warning)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid var(--border-metal)',
+              paddingBottom: '6px',
+            }}
+          >
+            <span
+              style={{
+                fontSize: '12px',
+                fontWeight: 900,
+                color: 'var(--color-warning)',
+                letterSpacing: '0.08em',
+              }}
+            >
+              СЛУЖЕБНЫЙ ПУЛЬТ СМЕНЫ
+            </span>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(false)}
+              className="instrument-btn"
+              style={{ padding: '2px 7px', fontSize: '11px' }}
+            >
+              Закрыть ✕
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '8px',
+            }}
+          >
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '11px',
+                  color: 'var(--text-caption)',
+                  marginBottom: '3px',
+                }}
+              >
+                РЕЖИМ КОНТУРА:
+              </label>
+              <select
+                aria-label="Режим работы приложения"
+                value={state.mode}
+                onChange={(e) => onChangeMode(e.target.value as AppMode)}
+                className="instrument-btn mono"
+                style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
+              >
+                <option value="ПОЛНЫЙ">ПОЛНЫЙ (Сеть)</option>
+                <option value="РУЧНОЙ">РУЧНОЙ (Голос)</option>
+                <option value="АВТОНОМНЫЙ">АВТОНОМНЫЙ</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '11px',
+                  color: 'var(--text-caption)',
+                  marginBottom: '3px',
+                }}
+              >
+                ТЕМА ПРИБОРА:
+              </label>
+              <select
+                aria-label="Тема оформления прибора"
+                value={state.theme}
+                onChange={(e) => onChangeTheme(e.target.value as ThemeMode)}
+                className="instrument-btn"
+                style={{ width: '100%', padding: '5px 8px', fontSize: '12px' }}
+              >
+                <option value="night">Ночная смена</option>
+                <option value="light">Светлый прибор</option>
+                <option value="paper">Бумажный штаб</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <button
+              type="button"
+              onClick={onToggleSound}
+              className={`instrument-btn mono ${soundEnabled ? 'btn-stable' : ''}`}
+              style={{ fontSize: '12px', flex: 1 }}
+            >
+              {soundEnabled ? 'ЗВУК ВКЛ' : 'ЗВУК ВЫКЛ'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onOpenProjectorWindow();
+                setDrawerOpen(false);
+              }}
+              className="instrument-btn btn-action"
+              style={{ fontSize: '12px', flex: 1 }}
+            >
+              Окно проектора ↗
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                onLoadDemoPreset();
+                setDrawerOpen(false);
+              }}
+              className="instrument-btn btn-warning"
+              style={{ fontSize: '12px', flex: 1 }}
+            >
+              Демо 1210/1240
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                onOpenEmergencyMenu();
+                setDrawerOpen(false);
+              }}
+              className="instrument-btn btn-incident"
+              style={{ fontSize: '12px', flex: 1 }}
+            >
+              Авария [Esc]
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
