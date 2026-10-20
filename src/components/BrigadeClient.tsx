@@ -77,7 +77,8 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
   } | null>(null);
   const [showPracticeTab, setShowPracticeTab] = useState(false);
   const [showRotationMatrix, setShowRotationMatrix] = useState(false);
-  const [prologueOverride, setPrologueOverride] = useState<'auto' | 'show' | 'hide'>('auto');
+  const [showRoleConsole, setShowRoleConsole] = useState(false);
+  const [prologueOverride, setPrologueOverride] = useState<'auto' | 'show' | 'hide'>('hide');
 
   const isProloguePhase = state.phase.startsWith('prologue_');
   const showPrologueWorkbench =
@@ -793,14 +794,43 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
         </div>
       )}
 
+      {/* Компактная плашка вызова ролевых пультов (открыта автоматически для Чтеца, Докладчика и Писаря) */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button
+          type="button"
+          onClick={() => setShowRoleConsole((p) => !p)}
+          className={`instrument-btn ${
+            showRoleConsole ||
+            activeRole === 'писарь' ||
+            activeRole === 'докладчик' ||
+            activeRole === 'чтец'
+              ? 'btn-warning'
+              : ''
+          }`}
+          style={{ fontSize: '12.5px' }}
+        >
+          {showRoleConsole ||
+          activeRole === 'писарь' ||
+          activeRole === 'докладчик' ||
+          activeRole === 'чтец'
+            ? 'Скрыть пульт Докладчика (Апелляция 30 с) и Журнал Писаря ▴'
+            : 'Показать пульт Докладчика (Апелляция 30 с) и Журнал Писаря ▾'}
+        </button>
+      </div>
+
       {/* Нижний ряд ролевых приборов бригады: 1) Пульт Чтеца и Докладчика (Апелляция 30 с) · 2) Пульт Писаря (Журнал смены) */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '44fr 56fr',
-          gap: '16px',
-        }}
-      >
+      {(showRoleConsole ||
+        activeRole === 'писарь' ||
+        activeRole === 'докладчик' ||
+        activeRole === 'чтец') && (
+        <div
+          className="gesture-card-drop"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '44fr 56fr',
+            gap: '16px',
+          }}
+        >
         {/* ПУЛЬТ ЧТЕЦА И ДОКЛАДЧИКА (ДОСЛОВНОЕ ЧТЕНИЕ + АПЕЛЛЯЦИЯ 30 С) */}
         <div
           className="material-armor screw-corners"
@@ -994,7 +1024,8 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
             </div>
           )}
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 };
