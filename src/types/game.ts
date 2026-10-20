@@ -215,12 +215,17 @@ export interface BattleRound {
   repelledCount: number;
 }
 
+export type PrologueVoteOption = 'broken' | 'intrusion' | 'dataLost';
+
+export type MechanismDutyId = 'zone' | 'catch_type' | 'cleanup_always';
+
 export interface PrologueState {
   pollVotes: {
     broken: number;
     intrusion: number;
     dataLost: number;
   };
+  brigadeVotes?: Partial<Record<BrigadeId, PrologueVoteOption>>;
   pollRevealed: boolean;
   batchCrashed: boolean;
   matchedMines: Record<string, string>;
@@ -230,6 +235,7 @@ export interface PrologueState {
     CATCH: boolean;
     FINALLY: boolean;
   };
+  mechanismDuties?: Partial<Record<BrigadeId, MechanismDutyId>>;
   batchRepelled: boolean;
   secondWaveTriggered: boolean;
 }

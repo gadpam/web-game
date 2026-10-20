@@ -80,6 +80,7 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
   const [docSearch, setDocSearch] = useState<string>('');
   const [speechTimerSec, setSpeechTimerSec] = useState<number>(180);
   const [speechRunning, setSpeechRunning] = useState<boolean>(false);
+  const [protocolBattleNum, setProtocolBattleNum] = useState<1 | 2 | 3 | 4>(1);
   const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>(
     () =>
       Object.fromEntries(
@@ -580,6 +581,173 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
           >
             <div>Подпись старшего смены (преподаватель): _____________________</div>
             <div>Подписи бригадиров TRY / CATCH / FINALLY: _____________________</div>
+          </div>
+
+          {/* КАНОНИЧЕСКИЙ ТЕКСТОВЫЙ БЛАНК «ПРОТОКОЛ СМЕНЫ 03:00–09:09» ПО ДОКУМЕНТУ 07, П. 6 */}
+          <div
+            style={{
+              marginTop: '10px',
+              padding: '16px 20px',
+              background: 'rgba(0,0,0,0.28)',
+              border: '1px solid var(--border-metal)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: '13px',
+                color: 'var(--color-warning)',
+                fontWeight: 800,
+                marginBottom: '8px',
+              }}
+            >
+              ПЕЧАТНЫЙ БЛАНК ДЛЯ КОМИССИИ · ДОКУМЕНТ 07, П. 6 («ПРОТОКОЛ СМЕНЫ: ОДНА СТРАНИЦА»)
+            </div>
+            <pre
+              className="mono"
+              style={{
+                margin: 0,
+                fontSize: '14px',
+                lineHeight: 1.55,
+                whiteSpace: 'pre-wrap',
+                color: 'var(--text-main)',
+              }}
+            >
+{`                  ПРОТОКОЛ СМЕНЫ
+                  03:00 – 09:09 (Код партии: ${state.code})
+
+СТАРТ ПРОДАЖ
+  билетов выдано ......................... ${state.queue.issued} из ${state.queue.total}
+  пробито ................................ ${
+    state.queue.lost > 0
+      ? state.queue.lossReasons.join('; ') || 'волна 2 (порядок обработчиков)'
+      : 'нет (все 4 волны удержаны)'
+  }
+  потеряно ............................... ${state.queue.lost} человек
+
+БОИ
+  1 Перехват   атака ${state.battles[1].attacker} / защита ${state.battles[1].defender}      пробила ${state.battles[1].probedCount} · отбито ${state.battles[1].repelledCount}
+  2 Порядок    атака ${state.battles[2].attacker} / защита ${state.battles[2].defender}  пробила ${state.battles[2].probedCount} · отбито ${state.battles[2].repelledCount}
+  3 Гарантия   атака ${state.battles[3].attacker} / защита ${state.battles[3].defender}    пробила ${state.battles[3].probedCount} · отбито ${state.battles[3].repelledCount}
+  4 Честность  по рейтингу (${state.battles[4].attacker}/${state.battles[4].defender})        пробила ${state.battles[4].probedCount} · отбито ${state.battles[4].repelledCount}
+
+ЩИТ ${state.shield.filter((r) => r.unlocked).length}/6
+  анатомия · механизм · перехват · порядок · гарантия · честность
+
+НОМИНАЦИИ
+  самый точный разбор ... ${state.nominations.mostPreciseAnalysis}
+  лучший журнал ......... ${state.nominations.bestJournal}
+  честная ошибка ........ ${state.nominations.honestMistake}
+
+ПОДПИСИ
+  ведущий смены ________   арбитры ________   дежурные ________`}
+            </pre>
+          </div>
+
+          {/* БЛАНК «ПРОТОКОЛ АРБИТРА НА ОДИН БОЙ» ПО ДОКУМЕНТУ 07, П. 3 */}
+          <div
+            style={{
+              padding: '16px 20px',
+              background: 'rgba(0,0,0,0.22)',
+              border: '1px solid var(--border-metal)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '8px',
+                marginBottom: '10px',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--color-action)',
+                  fontWeight: 800,
+                }}
+              >
+                БЛАНК «ПРОТОКОЛ АРБИТРА» НА ВЫБРАННЫЙ БОЙ · ДОКУМЕНТ 07, П. 3
+              </span>
+              <div className="no-print" style={{ display: 'flex', gap: '6px' }}>
+                {([1, 2, 3, 4] as const).map((bNum) => (
+                  <button
+                    key={bNum}
+                    type="button"
+                    onClick={() => setProtocolBattleNum(bNum)}
+                    className={`instrument-btn mono ${
+                      protocolBattleNum === bNum ? 'btn-action' : ''
+                    }`}
+                    style={{ fontSize: '13px', padding: '4px 10px' }}
+                  >
+                    Бой {bNum} «{state.battles[bNum].codeName}»
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(() => {
+              const b = state.battles[protocolBattleNum];
+              const resProbed = b.verdict?.result === 'ПРОБИЛА' ? '[X]' : '[ ]';
+              const resRepelled = b.verdict?.result === 'ОТБИТА' ? '[X]' : '[ ]';
+              const resRejected = b.verdict?.result === 'НЕ ПРИНЯТА' ? '[X]' : '[ ]';
+              return (
+                <pre
+                  className="mono"
+                  style={{
+                    margin: 0,
+                    fontSize: '14px',
+                    lineHeight: 1.55,
+                    whiteSpace: 'pre-wrap',
+                    color: 'var(--text-main)',
+                  }}
+                >
+{`БОЙ ${b.number} («${b.codeName}»)   ФАЗА: battle_${b.number}   ВРЕМЯ: ${b.shiftClock}
+
+Атакует: ${b.attacker}            Защищается: ${b.defender}            Арбитр: ${b.arbiter}
+
+КАРТА АТАКИ
+  строка ${b.attackCard ? b.attackCard.line : b.targetLine}   тип ${
+                    b.attackCard ? b.attackCard.exceptionType : b.targetException
+                  }
+  утверждение ${
+    b.attackCard
+      ? b.attackCard.statement
+      : '________________________________________'
+  }
+
+КАРТА ЗАЩИТЫ
+  строка ${b.defenseCard ? b.defenseCard.line : b.targetLine}   обработчик ${
+                    b.defenseCard
+                      ? `${b.defenseCard.exceptionType} (слот #${b.defenseCard.patchSlot || 1})`
+                      : '____________________'
+                  }
+  утверждение ${
+    b.defenseCard
+      ? b.defenseCard.statement
+      : '________________________________________'
+  }
+
+ЗАПУСК
+  результат:  ${resProbed} ПРОБИЛА   ${resRepelled} ОТБИТА   ${resRejected} НЕ ПРИНЯТА
+  причина: ${
+    b.verdict?.rejectReason ||
+    (b.lastRun ? b.lastRun.consoleLog.join(' | ') : '__________________________________________')
+  }
+
+ОЧКИ
+  атакующим: ${b.verdict ? `+${b.verdict.attackerDelta}` : '____'}   защите: ${
+                    b.verdict ? `+${b.verdict.defenderDelta}` : '____'
+                  }   арбитру: ${b.verdict ? `+${b.verdict.arbiterDelta}` : '____'}
+
+ЖУРНАЛ (одна строка)
+  ${b.verdict?.journalLine || '____________________________________________________'}
+
+ПРОПУСК, НАЙДЕННЫЙ АРБИТРОМ
+  ${b.verdict?.missedSpotNote || (b.missedSpotAwarded ? 'Зафиксирован (+1 очко арбитру)' : '____________________________________________________')}`}
+                </pre>
+              );
+            })()}
           </div>
         </div>
       )}

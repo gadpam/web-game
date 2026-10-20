@@ -22,9 +22,11 @@ import {
   BattleTactId,
   BrigadeId,
   Card,
+  MechanismDutyId,
   MemberRole,
   PhaseId,
   PolygonFileId,
+  PrologueVoteOption,
   SessionState,
   ThemeMode,
   WorldId,
@@ -91,11 +93,20 @@ export type GameAction =
     }
   | { type: 'TOGGLE_SHIELD_RULE'; ruleId: number }
   | { type: 'UNLOCK_ALL_SHIELD' }
-  | { type: 'PROLOGUE_VOTE'; option: 'broken' | 'intrusion' | 'dataLost' }
+  | {
+      type: 'PROLOGUE_VOTE';
+      option: PrologueVoteOption;
+      brigade?: BrigadeId;
+    }
   | { type: 'PROLOGUE_REVEAL_POLL' }
   | { type: 'PROLOGUE_CRASH_BATCH' }
   | { type: 'PROLOGUE_MATCH_MINE'; mineId: string; exceptionType: string }
   | { type: 'PROLOGUE_TOGGLE_MECHANISM'; part: BrigadeId }
+  | {
+      type: 'PROLOGUE_ASSIGN_MECHANISM_DUTY';
+      part: BrigadeId;
+      duty: MechanismDutyId;
+    }
   | { type: 'PROLOGUE_REPEL_BATCH' }
   | { type: 'PROLOGUE_TRIGGER_SECOND_WAVE' }
   | { type: 'SET_BATTLE4_LEADER_ROLE'; role: BattleRole }
@@ -855,14 +866,31 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
     }
 
     case 'PROLOGUE_VOTE': {
+      const prevBrigadeVotes = state.prologue.brigadeVotes || {};
+      const nextVotes = { ...state.prologue.pollVotes };
+
+      if (action.brigade) {
+        const previousChoice = prevBrigadeVotes[action.brigade];
+        if (previousChoice && previousChoice !== action.option) {
+          nextVotes[previousChoice] = Math.max(0, nextVotes[previousChoice] - 1);
+          nextVotes[action.option] = nextVotes[action.option] + 1;
+        } else if (!previousChoice) {
+          nextVotes[action.option] = nextVotes[action.option] + 1;
+        }
+      } else {
+        nextVotes[action.option] = nextVotes[action.option] + 1;
+      }
+
+      const nextBrigadeVotes = action.brigade
+        ? { ...prevBrigadeVotes, [action.brigade]: action.option }
+        : prevBrigadeVotes;
+
       return {
         ...state,
         prologue: {
           ...state.prologue,
-          pollVotes: {
-            ...state.prologue.pollVotes,
-            [action.option]: state.prologue.pollVotes[action.option] + 1,
-          },
+          pollVotes: nextVotes,
+          brigadeVotes: nextBrigadeVotes,
         },
       };
     }
@@ -930,6 +958,32 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
       };
     }
 
+    case 'PROLOGUE_ASSIGN_MECHANISM_DUTY': {
+      const expectedMap: Record<BrigadeId, MechanismDutyId> = {
+        TRY: 'zone',
+        CATCH: 'catch_type',
+        FINALLY: 'cleanup_always',
+      };
+      const prevDuties = state.prologue.mechanismDuties || {};
+      const nextDuties = {
+        ...prevDuties,
+        [action.part]: action.duty,
+      };
+      const isCorrect = expectedMap[action.part] === action.duty;
+      const nextParts = {
+        ...state.prologue.mechanismParts,
+        [action.part]: isCorrect,
+      };
+      return {
+        ...state,
+        prologue: {
+          ...state.prologue,
+          mechanismDuties: nextDuties,
+          mechanismParts: nextParts,
+        },
+      };
+    }
+
     case 'PROLOGUE_REPEL_BATCH': {
       const shield = state.shield.map((r) =>
         r.id === 1 || r.id === 2 ? { ...r, unlocked: true } : r
@@ -949,6 +1003,11 @@ export function gameReducer(state: SessionState, action: GameAction): SessionSta
         prologue: {
           ...state.prologue,
           mechanismParts: { TRY: true, CATCH: true, FINALLY: true },
+          mechanismDuties: {
+            TRY: 'zone',
+            CATCH: 'catch_type',
+            FINALLY: 'cleanup_always',
+          },
           batchRepelled: true,
         },
         journal: [journalEntry, ...state.journal],

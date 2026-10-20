@@ -17,7 +17,11 @@ import {
   parseLaunchParams,
   persistSessionState,
 } from '../game/syncBus';
-import { getWorldPolygonFiles, getWorldPrologueLogs } from '../game/worldPolygons';
+import {
+  getPolygonTreeNodes,
+  getWorldPolygonFiles,
+  getWorldPrologueLogs,
+} from '../game/worldPolygons';
 
 describe('АПТАЙМ · Ночная смена — Ядро и Регламент (Документы 00–11)', () => {
   it('содержит все 11 документов комплекта «Аптайм» (от 00 до 11)', () => {
@@ -464,5 +468,75 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
       scenarioId: 'arbiter_stop_dispute',
     });
     expect(s5.battles[2].arbiterStopActive).toBe(true);
+  });
+
+  it('обрабатывает интерактивный пролог с ноутбуков бригад (голосование без дублей и сборку механизма в разрезе)', () => {
+    let state = createInitialSession('4826');
+    const initialIntrusion = state.prologue.pollVotes.intrusion;
+    const initialBroken = state.prologue.pollVotes.broken;
+
+    // Бригада TRY голосует за «сервис сломался»
+    state = gameReducer(state, {
+      type: 'PROLOGUE_VOTE',
+      option: 'broken',
+      brigade: 'TRY',
+    });
+    expect(state.prologue.brigadeVotes?.TRY).toBe('broken');
+    expect(state.prologue.pollVotes.broken).toBe(initialBroken + 1);
+
+    // Бригада TRY меняет решение на «в сервис вошли» — старый голос снимается, новый добавляется
+    state = gameReducer(state, {
+      type: 'PROLOGUE_VOTE',
+      option: 'intrusion',
+      brigade: 'TRY',
+    });
+    expect(state.prologue.brigadeVotes?.TRY).toBe('intrusion');
+    expect(state.prologue.pollVotes.broken).toBe(initialBroken);
+    expect(state.prologue.pollVotes.intrusion).toBe(initialIntrusion + 1);
+
+    // Сцена 3: сборка механизма в разрезе (TRY -> zone, CATCH -> catch_type, FINALLY -> cleanup_always)
+    state = gameReducer(state, {
+      type: 'PROLOGUE_ASSIGN_MECHANISM_DUTY',
+      part: 'TRY',
+      duty: 'catch_type', // неверная роль для TRY
+    });
+    expect(state.prologue.mechanismParts.TRY).toBe(false);
+
+    state = gameReducer(state, {
+      type: 'PROLOGUE_ASSIGN_MECHANISM_DUTY',
+      part: 'TRY',
+      duty: 'zone',
+    });
+    state = gameReducer(state, {
+      type: 'PROLOGUE_ASSIGN_MECHANISM_DUTY',
+      part: 'CATCH',
+      duty: 'catch_type',
+    });
+    state = gameReducer(state, {
+      type: 'PROLOGUE_ASSIGN_MECHANISM_DUTY',
+      part: 'FINALLY',
+      duty: 'cleanup_always',
+    });
+    expect(state.prologue.mechanismParts).toEqual({
+      TRY: true,
+      CATCH: true,
+      FINALLY: true,
+    });
+  });
+
+  it('формирует дерево из 5 файлов полигона (Program.cs, Booking.cs, Pricing.cs, Seats.cs, Promo.cs) по ТЗ п. 7 для всех 4 миров', () => {
+    const worlds = ['tickets', 'game_server', 'food_delivery', 'clinic'] as const;
+    for (const w of worlds) {
+      const tree = getPolygonTreeNodes(w);
+      expect(tree.nodes).toHaveLength(5);
+      expect(tree.nodes.map((n) => n.fileId)).toEqual([
+        'Program.cs',
+        'Booking.cs',
+        'Pricing.cs',
+        'Seats.cs',
+        'Promo.cs',
+      ]);
+      expect(tree.nodes[4].branchPrefix).toBe('└──');
+    }
   });
 });

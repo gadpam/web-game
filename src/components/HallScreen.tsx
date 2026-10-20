@@ -20,6 +20,7 @@ import {
 import { PracticeWorkbench } from './PracticeWorkbench';
 import { FinalPhasesPanel } from './FinalPhasesPanel';
 import { REHEARSAL_CHECKPOINTS } from '../game/rehearsal';
+import { PolygonFileTreeBar } from './PolygonFileTreeBar';
 
 interface HallScreenProps {
   state: SessionState;
@@ -585,6 +586,56 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                         похищены. В очередь вставлено 26 записей.
                       </div>
                     )}
+
+                    {/* Индикатор ответов 3 бригад из Клиента бригады */}
+                    <div
+                      style={{
+                        marginTop: '10px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '8px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          color: 'var(--text-caption)',
+                          fontWeight: 700,
+                        }}
+                      >
+                        ГОЛОСА БРИГАД С НОУТБУКОВ:
+                      </span>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {(['TRY', 'CATCH', 'FINALLY'] as BrigadeId[]).map((bId) => {
+                          const b = state.brigades[bId];
+                          const v = state.prologue.brigadeVotes?.[bId];
+                          const vLabel =
+                            v === 'intrusion'
+                              ? '«в сервис вошли»'
+                              : v === 'broken'
+                              ? '«сервис сломался»'
+                              : v === 'dataLost'
+                              ? '«данные потеряны»'
+                              : 'ожидание...';
+                          return (
+                            <span
+                              key={bId}
+                              className="mono"
+                              style={{
+                                fontSize: '13px',
+                                padding: '3px 8px',
+                                border: '1px solid var(--border-metal)',
+                                color: v ? 'var(--color-stable)' : 'var(--text-caption)',
+                              }}
+                            >
+                              {b.shapeSymbol} {bId}: {vLabel}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1134,52 +1185,8 @@ export const HallScreen: React.FC<HallScreenProps> = ({
                 </div>
               )}
 
-              {/* Вкладки 5 файлов полигона */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  gap: '8px',
-                }}
-              >
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                  {(Object.keys(worldPolygonFiles) as PolygonFileId[]).map((fileId) => {
-                    const spec = worldPolygonFiles[fileId];
-                    const active = state.selectedPolygonFile === fileId;
-                    return (
-                      <button
-                        key={fileId}
-                        type="button"
-                        onClick={() =>
-                          dispatch({ type: 'SELECT_POLYGON_FILE', file: fileId })
-                        }
-                        className={`instrument-btn mono ${active ? 'btn-action' : ''}`}
-                      >
-                        <span>{fileId}</span>
-                        <span
-                          style={{
-                            fontSize: '13px',
-                            color: 'var(--text-caption)',
-                          }}
-                        >
-                          [Бой {spec.battleNumber}]
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <span
-                  style={{
-                    fontSize: '13px',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  {currentPolygonSpec.subtitle}
-                </span>
-              </div>
+              {/* Вкладки 5 файлов полигона + Дерево модулей по Документу 06, п. 7 */}
+              <PolygonFileTreeBar state={state} dispatch={dispatch} />
 
               {/* Монитор кода */}
               <div

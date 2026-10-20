@@ -327,11 +327,13 @@ export function createInitialSession(code = '4826'): SessionState {
     battles,
     prologue: {
       pollVotes: { broken: 2, intrusion: 14, dataLost: 2 },
+      brigadeVotes: {},
       pollRevealed: false,
       batchCrashed: false,
       matchedMines: {},
       hierarchyShown: false,
       mechanismParts: { TRY: false, CATCH: false, FINALLY: false },
+      mechanismDuties: {},
       batchRepelled: false,
       secondWaveTriggered: false,
     },

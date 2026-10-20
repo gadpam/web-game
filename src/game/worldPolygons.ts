@@ -1,6 +1,210 @@
 import { POLYGON_FILES, PROLOGUE_LOG_LINES } from './constants';
 import { PolygonFileId, PolygonFileSpec, WorldId } from '../types/game';
 
+export interface PolygonTreeNode {
+  branchPrefix: '├──' | '└──';
+  fileId: PolygonFileId;
+  shortDesc: string;
+  keyLine: number;
+  exceptionType: string;
+  battleNumber: 1 | 2 | 3 | 4;
+}
+
+export function getPolygonTreeNodes(world: WorldId): {
+  rootTitle: string;
+  nodes: PolygonTreeNode[];
+} {
+  if (world === 'game_server') {
+    return {
+      rootTitle: 'Полигон «Арена-Матч»',
+      nodes: [
+        {
+          branchPrefix: '├──',
+          fileId: 'Program.cs',
+          shortDesc: 'сценарий: лобби из 1240 профилей турнира',
+          keyLine: 12,
+          exceptionType: 'BatchRunner',
+          battleNumber: 1,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Booking.cs',
+          shortDesc: 'разбор MMR профиля (строка 12 — FormatException)',
+          keyLine: 12,
+          exceptionType: 'FormatException',
+          battleNumber: 1,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Pricing.cs',
+          shortDesc: 'расчёт рейтинга отряда (строка 31 — DivideByZeroException)',
+          keyLine: 31,
+          exceptionType: 'DivideByZeroException',
+          battleNumber: 2,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Seats.cs',
+          shortDesc: 'слоты сервера (строка 8 / 41 — IndexOutOfRangeException)',
+          keyLine: 41,
+          exceptionType: 'IndexOutOfRangeException',
+          battleNumber: 3,
+        },
+        {
+          branchPrefix: '└──',
+          fileId: 'Promo.cs',
+          shortDesc: 'турнирный токен (строка 19 / 55 — NullReferenceException)',
+          keyLine: 55,
+          exceptionType: 'NullReferenceException',
+          battleNumber: 4,
+        },
+      ],
+    };
+  }
+
+  if (world === 'food_delivery') {
+    return {
+      rootTitle: 'Полигон «Конвейер»',
+      nodes: [
+        {
+          branchPrefix: '├──',
+          fileId: 'Program.cs',
+          shortDesc: 'сценарий: пакет из 1240 заказов горячего часа',
+          keyLine: 12,
+          exceptionType: 'BatchRunner',
+          battleNumber: 1,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Booking.cs',
+          shortDesc: 'разбор адреса заказа (строка 12 — FormatException)',
+          keyLine: 12,
+          exceptionType: 'FormatException',
+          battleNumber: 1,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Pricing.cs',
+          shortDesc: 'расчёт тарифа курьеров (строка 31 — DivideByZeroException)',
+          keyLine: 31,
+          exceptionType: 'DivideByZeroException',
+          battleNumber: 2,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Seats.cs',
+          shortDesc: 'ячейки термобоксов (строка 8 / 41 — IndexOutOfRangeException)',
+          keyLine: 41,
+          exceptionType: 'IndexOutOfRangeException',
+          battleNumber: 3,
+        },
+        {
+          branchPrefix: '└──',
+          fileId: 'Promo.cs',
+          shortDesc: 'купон скидки (строка 19 / 55 — NullReferenceException)',
+          keyLine: 55,
+          exceptionType: 'NullReferenceException',
+          battleNumber: 4,
+        },
+      ],
+    };
+  }
+
+  if (world === 'clinic') {
+    return {
+      rootTitle: 'Полигон «МедСмена»',
+      nodes: [
+        {
+          branchPrefix: '├──',
+          fileId: 'Program.cs',
+          shortDesc: 'сценарий: реестр из 1240 талонов к 08:00',
+          keyLine: 12,
+          exceptionType: 'BatchRunner',
+          battleNumber: 1,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Booking.cs',
+          shortDesc: 'разбор номера кабинета (строка 12 — FormatException)',
+          keyLine: 12,
+          exceptionType: 'FormatException',
+          battleNumber: 1,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Pricing.cs',
+          shortDesc: 'расчёт квоты смены (строка 31 — DivideByZeroException)',
+          keyLine: 31,
+          exceptionType: 'DivideByZeroException',
+          battleNumber: 2,
+        },
+        {
+          branchPrefix: '├──',
+          fileId: 'Seats.cs',
+          shortDesc: 'окна приёма (строка 8 / 41 — IndexOutOfRangeException)',
+          keyLine: 41,
+          exceptionType: 'IndexOutOfRangeException',
+          battleNumber: 3,
+        },
+        {
+          branchPrefix: '└──',
+          fileId: 'Promo.cs',
+          shortDesc: 'код полиса ОМС (строка 19 / 55 — NullReferenceException)',
+          keyLine: 55,
+          exceptionType: 'NullReferenceException',
+          battleNumber: 4,
+        },
+      ],
+    };
+  }
+
+  return {
+    rootTitle: 'Полигон «Партер»',
+    nodes: [
+      {
+        branchPrefix: '├──',
+        fileId: 'Program.cs',
+        shortDesc: 'сценарий: очередь из 1240 записей',
+        keyLine: 12,
+        exceptionType: 'BatchRunner',
+        battleNumber: 1,
+      },
+      {
+        branchPrefix: '├──',
+        fileId: 'Booking.cs',
+        shortDesc: 'разбор брони (строка 12 — FormatException)',
+        keyLine: 12,
+        exceptionType: 'FormatException',
+        battleNumber: 1,
+      },
+      {
+        branchPrefix: '├──',
+        fileId: 'Pricing.cs',
+        shortDesc: 'расчёт цены (строка 31 — DivideByZeroException)',
+        keyLine: 31,
+        exceptionType: 'DivideByZeroException',
+        battleNumber: 2,
+      },
+      {
+        branchPrefix: '├──',
+        fileId: 'Seats.cs',
+        shortDesc: 'места (строка 8 / 41 — IndexOutOfRangeException)',
+        keyLine: 41,
+        exceptionType: 'IndexOutOfRangeException',
+        battleNumber: 3,
+      },
+      {
+        branchPrefix: '└──',
+        fileId: 'Promo.cs',
+        shortDesc: 'промокод (строка 19 / 55 — NullReferenceException)',
+        keyLine: 55,
+        exceptionType: 'NullReferenceException',
+        battleNumber: 4,
+      },
+    ],
+  };
+}
+
 export function getWorldPolygonFiles(
   world: WorldId
 ): Record<PolygonFileId, PolygonFileSpec> {
@@ -33,7 +237,7 @@ export function getWorldPolygonFiles(
           },
           {
             line: 12,
-            code: '            var profile = Booking.Parse(req);       // Бой 1: FormatException (MMR = "pro")',
+            code: '            var profile = Booking.Parse(req);       // Бой 1: FormatException (MMR = "два")',
             vulnerable: true,
             battleTag: 1,
             exceptionHint: 'FormatException',
@@ -98,9 +302,18 @@ export function getWorldPolygonFiles(
           { line: 17, code: '}' },
         ],
       },
-      'Pricing.cs': POLYGON_FILES['Pricing.cs'],
-      'Seats.cs': POLYGON_FILES['Seats.cs'],
-      'Promo.cs': POLYGON_FILES['Promo.cs'],
+      'Pricing.cs': {
+        ...POLYGON_FILES['Pricing.cs'],
+        subtitle: 'Бой 2 «Порядок» · Расчёт турнирного коэффициента и ошибка CS0160',
+      },
+      'Seats.cs': {
+        ...POLYGON_FILES['Seats.cs'],
+        subtitle: 'Бой 3 «Гарантия» · Слот арены (1..6) и освобождение сокета в finally',
+      },
+      'Promo.cs': {
+        ...POLYGON_FILES['Promo.cs'],
+        subtitle: 'Бой 4 «Честность» · Турнирный пропуск, пустой catch {} и throw;',
+      },
     };
   }
 
@@ -162,10 +375,22 @@ export function getWorldPolygonFiles(
           { line: 20, code: '}' },
         ],
       },
-      'Booking.cs': POLYGON_FILES['Booking.cs'],
-      'Pricing.cs': POLYGON_FILES['Pricing.cs'],
-      'Seats.cs': POLYGON_FILES['Seats.cs'],
-      'Promo.cs': POLYGON_FILES['Promo.cs'],
+      'Booking.cs': {
+        ...POLYGON_FILES['Booking.cs'],
+        subtitle: 'Бой 1 «Перехват» · Разбор этажа и числа порций в заказе',
+      },
+      'Pricing.cs': {
+        ...POLYGON_FILES['Pricing.cs'],
+        subtitle: 'Бой 2 «Порядок» · Расчёт доставки на бригаду курьеров (CS0160)',
+      },
+      'Seats.cs': {
+        ...POLYGON_FILES['Seats.cs'],
+        subtitle: 'Бой 3 «Гарантия» · Термобоксы 1..6 и возврат коннекта в finally',
+      },
+      'Promo.cs': {
+        ...POLYGON_FILES['Promo.cs'],
+        subtitle: 'Бой 4 «Честность» · Купон горячего часа и честная запись в отчёт',
+      },
     };
   }
 
@@ -227,10 +452,22 @@ export function getWorldPolygonFiles(
         { line: 20, code: '}' },
       ],
     },
-    'Booking.cs': POLYGON_FILES['Booking.cs'],
-    'Pricing.cs': POLYGON_FILES['Pricing.cs'],
-    'Seats.cs': POLYGON_FILES['Seats.cs'],
-    'Promo.cs': POLYGON_FILES['Promo.cs'],
+    'Booking.cs': {
+      ...POLYGON_FILES['Booking.cs'],
+      subtitle: 'Бой 1 «Перехват» · Разбор номера кабинета и окна приёма',
+    },
+    'Pricing.cs': {
+      ...POLYGON_FILES['Pricing.cs'],
+      subtitle: 'Бой 2 «Порядок» · Квота дежурных врачей и порядок catch (CS0160)',
+    },
+    'Seats.cs': {
+      ...POLYGON_FILES['Seats.cs'],
+      subtitle: 'Бой 3 «Гарантия» · Окна 1..6 регистратуры и закрытие БД в finally',
+    },
+    'Promo.cs': {
+      ...POLYGON_FILES['Promo.cs'],
+      subtitle: 'Бой 4 «Честность» · Проверка полиса ОМС без проглатывания ошибок',
+    },
   };
 }
 

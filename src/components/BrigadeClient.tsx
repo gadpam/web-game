@@ -14,6 +14,8 @@ import {
   SessionState,
 } from '../types/game';
 import { PracticeWorkbench } from './PracticeWorkbench';
+import { PrologueWorkbench } from './PrologueWorkbench';
+import { PolygonFileTreeBar } from './PolygonFileTreeBar';
 
 type CardType = 'атака' | 'защита' | 'контратака';
 
@@ -73,6 +75,12 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
     reason?: string;
   } | null>(null);
   const [showPracticeTab, setShowPracticeTab] = useState(false);
+  const [prologueOverride, setPrologueOverride] = useState<'auto' | 'show' | 'hide'>('auto');
+
+  const isProloguePhase = state.phase.startsWith('prologue_');
+  const showPrologueWorkbench =
+    prologueOverride === 'show' ||
+    (prologueOverride === 'auto' && isProloguePhase);
 
   // Поля рабочего места Писаря (Журнал смены — Документ 07, п. 4)
   const [scribeClaimed, setScribeClaimed] = useState<string>(
@@ -212,7 +220,24 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
           ))}
           <button
             type="button"
-            onClick={() => setShowPracticeTab((prev) => !prev)}
+            onClick={() => {
+              setShowPracticeTab(false);
+              setPrologueOverride((prev) =>
+                prev === 'show' || (prev === 'auto' && isProloguePhase)
+                  ? 'hide'
+                  : 'show'
+              );
+            }}
+            className={`instrument-btn ${showPrologueWorkbench ? 'btn-action' : ''}`}
+          >
+            {showPrologueWorkbench ? '← К бланку карты боя' : '03:00 Пульт завязки'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPrologueOverride('hide');
+              setShowPracticeTab((prev) => !prev);
+            }}
             className={`instrument-btn ${
               showPracticeTab || state.phase === 'practice' ? 'btn-stable' : ''
             }`}
@@ -296,6 +321,13 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
 
       {showPracticeTab || state.phase === 'practice' ? (
         <PracticeWorkbench state={state} dispatch={dispatch} />
+      ) : showPrologueWorkbench ? (
+        <PrologueWorkbench
+          state={state}
+          dispatch={dispatch}
+          activeBrigade={activeBrigade}
+          onExitToBattleCard={() => setPrologueOverride('hide')}
+        />
       ) : (
         <div
           style={{
@@ -600,26 +632,13 @@ export const BrigadeClient: React.FC<BrigadeClientProps> = ({
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 flexWrap: 'wrap',
                 gap: '8px',
               }}
             >
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {(Object.keys(worldPolygonFiles) as PolygonFileId[]).map((fId) => (
-                  <button
-                    key={fId}
-                    type="button"
-                    onClick={() =>
-                      dispatch({ type: 'SELECT_POLYGON_FILE', file: fId })
-                    }
-                    className={`instrument-btn mono ${
-                      state.selectedPolygonFile === fId ? 'btn-action' : ''
-                    }`}
-                  >
-                    {fId}
-                  </button>
-                ))}
+              <div style={{ flex: 1 }}>
+                <PolygonFileTreeBar state={state} dispatch={dispatch} compact />
               </div>
 
               <button
