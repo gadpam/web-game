@@ -9,6 +9,7 @@ import { GameAction } from '../game/reducer';
 import { SessionState } from '../types/game';
 import { DefenseDeckPanel } from './DefenseDeckPanel';
 import { RoleRotationMatrix } from './RoleRotationMatrix';
+import { TechMapSelfAnalysisPanel } from './TechMapSelfAnalysisPanel';
 
 interface MaterialsScreenProps {
   state: SessionState;
@@ -22,7 +23,8 @@ type MaterialSubTab =
   | 'presentation'
   | 'homework'
   | 'checklist'
-  | 'kit_docs';
+  | 'kit_docs'
+  | 'tech_map';
 
 const ACCEPTANCE_CHECKLIST_ITEMS: string[] = [
   'С первого взгляда не читается как сгенерированный интерфейс: есть три материала (экран, бумага, бронеплита), свет сверху-слева и след человека.',
@@ -254,6 +256,15 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
             }`}
           >
             7. Полный комплект (11 документов)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSubTab('tech_map')}
+            className={`instrument-btn ${
+              subTab === 'tech_map' ? 'btn-action' : ''
+            }`}
+          >
+            8. Техкарта 90 мин и Самоанализ (Док. 09–10)
           </button>
         </div>
 
@@ -1213,6 +1224,11 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
             </pre>
           </div>
         </div>
+      )}
+
+      {/* ================= 8. ЖИВАЯ ТЕХНОЛОГИЧЕСКАЯ КАРТА 90 МИН И САМОАНАЛИЗ (ДОК. 09–10) ================= */}
+      {subTab === 'tech_map' && (
+        <TechMapSelfAnalysisPanel state={state} dispatch={dispatch} />
       )}
     </div>
   );

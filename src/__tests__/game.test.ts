@@ -34,6 +34,11 @@ import {
   getMemberSlotForRole,
   verifyRotationMatrixInvariants,
 } from '../game/roleRotation';
+import {
+  evaluateSubjectOutcomes,
+  getDidacticCycleStepForState,
+  TECH_MAP_STAGES,
+} from '../game/techMap';
 
 describe('АПТАЙМ · Ночная смена — Ядро и Регламент (Документы 00–11)', () => {
   it('содержит все 11 документов комплекта «Аптайм» (от 00 до 11)', () => {
@@ -617,5 +622,26 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
         expect(getMemberSlotForRole(role, battleNum)).toBe(slot);
       }
     }
+  });
+
+  it('синхронизирует 90-минутную Технологическую карту (14 этапов), 5-шаговый цикл «Нужда → Имя» и 6 предметных результатов (Док. 09–10)', () => {
+    expect(TECH_MAP_STAGES).toHaveLength(14);
+    const totalMinutes = TECH_MAP_STAGES.reduce(
+      (acc, st) => acc + st.durationMin,
+      0
+    );
+    expect(totalMinutes).toBe(90);
+
+    const initial = createInitialSession('4826');
+    expect(getDidacticCycleStepForState(initial).code).toBe('НУЖДА');
+    expect(
+      evaluateSubjectOutcomes(initial).filter((o) => o.achieved)
+    ).toHaveLength(0);
+
+    const completed = gameReducer(initial, { type: 'LOAD_DEMO_1210' });
+    expect(getDidacticCycleStepForState(completed).code).toBe('ПОСЛЕДСТВИЕ');
+    expect(
+      evaluateSubjectOutcomes(completed).filter((o) => o.achieved)
+    ).toHaveLength(6);
   });
 });
