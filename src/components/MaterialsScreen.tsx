@@ -1,7 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  COMMISSION_QA,
-  DEFENSE_SLIDES_12,
   INITIAL_SHIELD_RULES,
   REFERENCE_CARDS,
   WORLD_PRESETS,
@@ -9,6 +7,7 @@ import {
 import { KIT_DOCUMENTS } from '../game/kitDocuments';
 import { GameAction } from '../game/reducer';
 import { SessionState } from '../types/game';
+import { DefenseDeckPanel } from './DefenseDeckPanel';
 
 interface MaterialsScreenProps {
   state: SessionState;
@@ -75,11 +74,8 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
   dispatch,
 }) => {
   const [subTab, setSubTab] = useState<MaterialSubTab>('protocol');
-  const [selectedSlide, setSelectedSlide] = useState<number>(1);
   const [selectedDocId, setSelectedDocId] = useState<string>('00');
   const [docSearch, setDocSearch] = useState<string>('');
-  const [speechTimerSec, setSpeechTimerSec] = useState<number>(180);
-  const [speechRunning, setSpeechRunning] = useState<boolean>(false);
   const [protocolBattleNum, setProtocolBattleNum] = useState<1 | 2 | 3 | 4>(1);
   const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>(
     () =>
@@ -89,18 +85,7 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
   );
   const [importFeedback, setImportFeedback] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!speechRunning) return;
-    const t = window.setInterval(() => {
-      setSpeechTimerSec((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => window.clearInterval(t);
-  }, [speechRunning]);
-
   const worldMeta = WORLD_PRESETS[state.world];
-  const currentSlide =
-    DEFENSE_SLIDES_12.find((s) => s.number === selectedSlide) ||
-    DEFENSE_SLIDES_12[0];
 
   const filteredDocs = useMemo(() => {
     const q = docSearch.trim().toLowerCase();
@@ -934,210 +919,7 @@ export const MaterialsScreen: React.FC<MaterialsScreenProps> = ({
 
       {/* ================= 4. ПРЕЗЕНТАЦИЯ И РЕЧЬ ЗАЩИТЫ (12 СЛАЙДОВ, 3 МИНУТЫ) ================= */}
       {subTab === 'presentation' && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '320px 1fr',
-            gap: '16px',
-          }}
-        >
-          <div
-            className="material-armor screw-corners"
-            style={{
-              padding: '12px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '6px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '6px',
-              }}
-            >
-              <span style={{ fontSize: '13px', fontWeight: 800 }}>
-                12 СЛАЙДОВ (ДОКУМЕНТ 11)
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSpeechRunning((r) => !r);
-                }}
-                className={`instrument-btn mono ${
-                  speechRunning ? 'btn-warning' : 'btn-stable'
-                }`}
-              >
-                Таймер 3:00 [{Math.floor(speechTimerSec / 60)}:
-                {String(speechTimerSec % 60).padStart(2, '0')}]
-              </button>
-            </div>
-
-            {DEFENSE_SLIDES_12.map((sl) => (
-              <button
-                key={sl.number}
-                type="button"
-                onClick={() => setSelectedSlide(sl.number)}
-                className={`instrument-btn ${
-                  selectedSlide === sl.number ? 'btn-action' : ''
-                }`}
-                style={{
-                  justifyContent: 'space-between',
-                  textAlign: 'left',
-                  padding: '8px 10px',
-                }}
-              >
-                <span style={{ fontSize: '13px', fontWeight: 700 }}>
-                  Слайд {sl.number}
-                </span>
-                <span className="mono" style={{ fontSize: '13px' }}>
-                  {sl.timeRange}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div
-            className="material-screen"
-            style={{
-              padding: '28px 32px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              minHeight: '460px',
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  fontSize: '14px',
-                  color: 'var(--color-warning)',
-                  fontWeight: 800,
-                }}
-              >
-                <span>
-                  СЛАЙД {currentSlide.number} ИЗ 12 · ЗАЩИТА МЕТОДИЧЕСКОЙ РАЗРАБОТКИ
-                </span>
-                <span className="mono">ТАЙМКОД: {currentSlide.timeRange}</span>
-              </div>
-
-              <h1
-                style={{
-                  fontSize: '40px',
-                  fontWeight: 900,
-                  margin: '18px 0',
-                  color: 'var(--text-main)',
-                  lineHeight: 1.18,
-                }}
-              >
-                {currentSlide.onSlide}
-              </h1>
-            </div>
-
-            <div
-              className="material-paper"
-              style={{
-                padding: '18px 22px',
-                marginTop: '24px',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '13px',
-                  color: 'var(--text-caption)',
-                  fontWeight: 700,
-                }}
-              >
-                ДОСЛОВНАЯ РЕЧЬ ДОКЛАДЧИКА (360 СЛОВ НА 3 МИНУТЫ):
-              </div>
-              <div
-                style={{
-                  fontSize: '20px',
-                  fontWeight: 700,
-                  marginTop: '6px',
-                  lineHeight: 1.45,
-                }}
-              >
-                «{currentSlide.speech}»
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginTop: '16px',
-              }}
-            >
-              <button
-                type="button"
-                disabled={selectedSlide <= 1}
-                onClick={() => setSelectedSlide((s) => Math.max(1, s - 1))}
-                className="instrument-btn"
-              >
-                ← Предыдущий слайд
-              </button>
-              <button
-                type="button"
-                disabled={selectedSlide >= 12}
-                onClick={() => setSelectedSlide((s) => Math.min(12, s + 1))}
-                className="instrument-btn btn-action"
-              >
-                Следующий слайд →
-              </button>
-            </div>
-
-            {/* Ответы на вопросы конкурсной комиссии (Документ 11, п. 4) */}
-            <div
-              style={{
-                marginTop: '20px',
-                paddingTop: '14px',
-                borderTop: '1px solid var(--border-metal)',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: '13px',
-                  color: 'var(--color-warning)',
-                  fontWeight: 800,
-                  marginBottom: '8px',
-                }}
-              >
-                ОТВЕТЫ НА ТИПОВЫЕ ВОПРОСЫ КОНКУРСНОЙ КОМИССИИ (ДОКУМЕНТ 11):
-              </div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                  gap: '10px',
-                }}
-              >
-                {COMMISSION_QA.map((item, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '10px 12px',
-                      background: 'rgba(0,0,0,0.34)',
-                      border: '1px solid var(--border-metal)',
-                      fontSize: '13px',
-                    }}
-                  >
-                    <div style={{ fontWeight: 800, color: 'var(--text-main)' }}>
-                      В: «{item.q}»
-                    </div>
-                    <div style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
-                      О: {item.a}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        <DefenseDeckPanel state={state} dispatch={dispatch} />
       )}
 
       {/* ================= 5. ДОМАШНЕЕ ЗАДАНИЕ «НОЧНОЙ ДЕЖУРНЫЙ» (3 УРОВНЯ) ================= */}

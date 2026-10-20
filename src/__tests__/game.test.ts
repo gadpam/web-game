@@ -22,6 +22,13 @@ import {
   getWorldPolygonFiles,
   getWorldPrologueLogs,
 } from '../game/worldPolygons';
+import {
+  DEFENSE_SLIDE_SPECS,
+  DEFENSE_TIMING_SEGMENTS,
+  formatDefenseClock,
+  getSlideForElapsedSeconds,
+  getTimingSegmentForElapsedSeconds,
+} from '../game/defenseDeck';
 
 describe('АПТАЙМ · Ночная смена — Ядро и Регламент (Документы 00–11)', () => {
   it('содержит все 11 документов комплекта «Аптайм» (от 00 до 11)', () => {
@@ -538,5 +545,25 @@ describe('АПТАЙМ · Ночная смена — Ядро и Регламе
       ]);
       expect(tree.nodes[4].branchPrefix).toBe('└──');
     }
+  });
+
+  it('синхронизирует 12 слайдов защиты и 6 отрезков речи 3:00 (180 с) по Документу 11', () => {
+    expect(DEFENSE_SLIDE_SPECS).toHaveLength(12);
+    expect(DEFENSE_TIMING_SEGMENTS).toHaveLength(6);
+
+    const totalSec = DEFENSE_TIMING_SEGMENTS.reduce(
+      (acc, s) => acc + s.durationSec,
+      0
+    );
+    expect(totalSec).toBe(180);
+
+    // Отрезок 3 (1:10–1:40, поворот) помечен как never_cut, отрезок 4 (1:40–2:20) — как cut_if_late
+    expect(getTimingSegmentForElapsedSeconds(75).policy).toBe('never_cut');
+    expect(getTimingSegmentForElapsedSeconds(110).policy).toBe('cut_if_late');
+
+    expect(getSlideForElapsedSeconds(0).number).toBe(1);
+    expect(getSlideForElapsedSeconds(90).number).toBe(6);
+    expect(getSlideForElapsedSeconds(175).number).toBe(12);
+    expect(formatDefenseClock(180)).toBe('3:00');
   });
 });
