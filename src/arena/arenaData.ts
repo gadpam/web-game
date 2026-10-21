@@ -173,7 +173,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Текст "два" вместо цифр обрушит int.Parse на строке 3',
         throwsException: 'FormatException',
         explosionLine: 3,
-        inlineValueHint: 'countText = "два" 💥 FormatException!',
+        inlineValueHint: 'countText = "два" -> throw FormatException',
       },
       {
         id: 'A2',
@@ -184,7 +184,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Ноль в делителе groupSize = 0 взорвёт деление на строке 4',
         throwsException: 'DivideByZeroException',
         explosionLine: 4,
-        inlineValueHint: '12 / 0 💥 DivideByZeroException!',
+        inlineValueHint: '12 / 0 -> throw DivideByZeroException',
       },
       {
         id: 'A3',
@@ -413,7 +413,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Пустая ссылка promo = null взорвёт вызов promo.Trim() на строке 3',
         throwsException: 'NullReferenceException',
         explosionLine: 3,
-        inlineValueHint: 'promo == null 💥 NullReferenceException!',
+        inlineValueHint: 'promo == null -> throw NullReferenceException',
       },
       {
         id: 'A2',
@@ -424,7 +424,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Индекс 99 за пределами массива взорвёт table[idx] на строке 4',
         throwsException: 'IndexOutOfRangeException',
         explosionLine: 4,
-        inlineValueHint: 'table[99] 💥 IndexOutOfRangeException!',
+        inlineValueHint: 'table[99] -> throw IndexOutOfRangeException',
       },
       {
         id: 'A3',
@@ -435,7 +435,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Отрицательный индекс -1 вызовет IndexOutOfRangeException на строке 4',
         throwsException: 'IndexOutOfRangeException',
         explosionLine: 4,
-        inlineValueHint: 'table[-1] 💥 IndexOutOfRangeException!',
+        inlineValueHint: 'table[-1] -> throw IndexOutOfRangeException',
       },
     ],
     defenseOptions: [
@@ -505,7 +505,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           },
           {
             lineNumber: 9,
-            code: '  catch (NullReferenceException ex) { return 0; } // ❌ ОШИБКА CS0160',
+            code: '  catch (NullReferenceException ex) { return 0; } // Ошибка компиляции CS0160: блок недостижим',
             isAddedPatch: true,
             roleTag: 'catch_specific',
             catchesTypes: ['NullReferenceException'],
@@ -640,7 +640,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         lineNumber: 3,
         indent: 1,
-        code: 'db.Open(); // 🔌 Открыли соединение с БД',
+        code: 'db.Open(); // Открытие соединения с БД',
       },
       {
         lineNumber: 4,
@@ -694,7 +694,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Деление на split = 0 взорвёт строку 5 и перепрыгнет db.Close()!',
         throwsException: 'DivideByZeroException',
         explosionLine: 5,
-        inlineValueHint: '100 / 0 💥 DivideByZeroException!',
+        inlineValueHint: '100 / 0 -> throw DivideByZeroException',
       },
       {
         id: 'A3',
@@ -705,7 +705,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Проверяет одновременно перехват деления на 0 и закрытие БД в finally',
         throwsException: 'DivideByZeroException',
         explosionLine: 5,
-        inlineValueHint: '500 / 0 💥 Проверка finally!',
+        inlineValueHint: '500 / 0 -> проверка блока finally',
       },
     ],
     defenseOptions: [
@@ -718,7 +718,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // 🔌 БД открыта', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
@@ -733,7 +733,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           },
           {
             lineNumber: 10,
-            code: '  finally { db.Close(); } // 🔒 Выполнится ВСЕГДА!',
+            code: '  finally { db.Close(); } // Гарантированное освобождение ресурса',
             isAddedPatch: true,
             roleTag: 'finally',
           },
@@ -754,11 +754,11 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // 🔌 БД открыта', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
-          { lineNumber: 7, code: '    db.Close(); // ❌ Сюда не дойдёт при return или взрыве!', roleTag: 'body' },
+          { lineNumber: 7, code: '    db.Close(); // Не выполнится при раннем return или исключении', roleTag: 'body' },
           { lineNumber: 8, code: '    return true;', roleTag: 'body' },
           { lineNumber: 9, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
@@ -785,7 +785,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // 🔌 БД открыта', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false; // Выход мимо стр. 10!', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
@@ -799,7 +799,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           },
           {
             lineNumber: 9,
-            code: '  db.Close(); // ❌ Не выполнится при return на строке 5!',
+            code: '  db.Close(); // Не выполнится при раннем выходе из метода',
             isAddedPatch: true,
             roleTag: 'after',
           },
@@ -821,7 +821,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // 🔌 БД открыта', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
@@ -927,7 +927,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Проверяет, записан ли сбой в AuditLog и сохранился ли адрес строки в стеке',
         throwsException: 'FormatException',
         explosionLine: 3,
-        inlineValueHint: '"HACK_77" 💥 Проверка лога и стека!',
+        inlineValueHint: 'pinInput = "HACK_77" -> throw FormatException',
       },
       {
         id: 'A2',
@@ -938,7 +938,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Пустой ввод: если у Защиты пустой catch {}, атака пройдёт незамеченной!',
         throwsException: 'FormatException',
         explosionLine: 3,
-        inlineValueHint: '"" 💥 Проверка на пустой catch!',
+        inlineValueHint: 'pinInput = "" -> throw FormatException',
       },
       {
         id: 'A3',
@@ -949,7 +949,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         shortDesc: 'Слишком большое число для int вызывает OverflowException на строке 3',
         throwsException: 'OverflowException',
         explosionLine: 3,
-        inlineValueHint: 'Overflow 💥 Проверка цепочки!',
+        inlineValueHint: 'pinInput = "999999999999999" -> throw OverflowException',
       },
     ],
     defenseOptions: [
@@ -968,7 +968,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 7,
-            code: '  catch (Exception ex) { log.Write(ex.Message); throw; } // ✓ Стек сохранён!',
+            code: '  catch (Exception ex) { log.Write(ex.Message); throw; } // Стек вызовов сохранён (rethrow)',
             isAddedPatch: true,
             roleTag: 'catch_specific',
             catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
@@ -998,7 +998,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 7,
-            code: '  catch (Exception ex) { log.Write(ex.Message); throw ex; } // ❌ Стирает стек!',
+            code: '  catch (Exception ex) { log.Write(ex.Message); throw ex; } // Антипаттерн CA2200: сброс StackTrace',
             isAddedPatch: true,
             roleTag: 'catch_specific',
             catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
@@ -1028,7 +1028,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 7,
-            code: '  catch { return 0; } // ❌ Пустой catch: взлом скрыт от журнала!',
+            code: '  catch { return 0; } // Антипаттерн: пустой catch скрывает сбой',
             isAddedPatch: true,
             roleTag: 'catch_general',
             catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
@@ -1128,7 +1128,7 @@ export function simulateClash(
       stepIndex: 1,
       activeLineNumber: defense.compileError.errorLine,
       skippedLineNumbers: [],
-      inlineBadge: `❌ BUILD FAILED: ${defense.compileError.code}`,
+      inlineBadge: `[BUILD FAILED] ${defense.compileError.code}`,
       statusBanner: defense.compileError.message,
       stepKind: 'compile_error',
       dbState: 'CLOSED',
@@ -1138,7 +1138,7 @@ export function simulateClash(
 
     return {
       outcome: 'BREACHED',
-      headline: `💥 ЩИТ НЕ СКОМПИЛИРОВАЛСЯ (${defense.compileError.code})!`,
+      headline: `ОШИБКА КОМПИЛЯЦИИ (${defense.compileError.code})!`,
       reasonDetailed: defense.compileError.message,
       attackPointsEarned: halfPool,
       defensePointsEarned: 0,
@@ -1193,7 +1193,7 @@ export function simulateClash(
         stepIndex: 3,
         activeLineNumber: finallyLineObj.lineNumber,
         skippedLineNumbers: skippedInTry,
-        inlineBadge: '🔒 finally: db.Close() выполнен!',
+        inlineBadge: '[FINALLY] db.Close() выполнен',
         statusBanner:
           'Шаг 3: Даже при раннем return управление заходит в блок finally и закрывает БД!',
         stepKind: 'finally',
@@ -1204,7 +1204,7 @@ export function simulateClash(
 
       return {
         outcome: 'REPELLED',
-        headline: '🛡️ УДАР ОТРАЖЁН! Блок finally закрыл БД при раннем return',
+        headline: 'ЗАЩИТА УСТОЯЛА: блок finally закрыл БД при раннем return',
         reasonDetailed:
           'Ранний return перепрыгнул конец блока try, но блок finally сработал гарантированно и предотвратил утечку соединения.',
         attackPointsEarned: 0,
@@ -1222,7 +1222,7 @@ export function simulateClash(
         stepIndex: 3,
         activeLineNumber: leakLine,
         skippedLineNumbers: [leakLine],
-        inlineBadge: '🔴 УТЕЧКА: db.Close() пропущен!',
+        inlineBadge: '[LEAK] Вызов db.Close() пропущен',
         statusBanner:
           'Шаг 3: Выход из метода произошёл мимо db.Close()! Соединение с базой данных осталось висеть открытым.',
         stepKind: 'leak',
@@ -1233,7 +1233,7 @@ export function simulateClash(
 
       return {
         outcome: 'BREACHED',
-        headline: '💥 ЩИТ ПРОБИТ! Утечка открытого соединения с БД',
+        headline: 'ПРОБИТИЕ ЗАЩИТЫ: утечка открытого соединения с БД',
         reasonDetailed:
           'Без блока finally ранний выход return false покинул метод до вызова db.Close(). Соединение с базой данных утекло!',
         attackPointsEarned: halfPool,
@@ -1263,7 +1263,7 @@ export function simulateClash(
 
     return {
       outcome: 'REPELLED',
-      headline: '🛡️ ХОЛОСТОЙ ВЫСТРЕЛ АТАКИ: Код отработал штатно',
+      headline: 'ШТАТНОЕ ВЫПОЛНЕНИЕ: входные данные не вызвали сбоя',
       reasonDetailed:
         'Атака выбрала безопасные входные данные, которые не вызывают исключения. Защита сохраняет очки!',
       attackPointsEarned: 0,
@@ -1312,7 +1312,7 @@ export function simulateClash(
       stepIndex: 3,
       activeLineNumber: defense.patchedLines.length,
       skippedLineNumbers: skippedLinesInTry,
-      inlineBadge: `💥 Unhandled ${attack.throwsException}!`,
+      inlineBadge: `[UNHANDLED] ${attack.throwsException}!`,
       statusBanner: `Шаг 3: В щите нет обработчика для типа ${attack.throwsException} — программа аварийно рухнула!`,
       stepKind: 'explode',
       dbState: round.number === 3 && !defense.closesDbOnException ? 'LEAK' : 'CLOSED',
@@ -1322,7 +1322,7 @@ export function simulateClash(
 
     return {
       outcome: 'BREACHED',
-      headline: `💥 ЩИТ ПРОБИТ! Необработанное ${attack.throwsException}`,
+      headline: `ПРОБИТИЕ ЗАЩИТЫ: необработанное исключение ${attack.throwsException}`,
       reasonDetailed: `Атака ударила типом ${attack.throwsException}, а в щите Защиты не оказалось подходящего блока catch.`,
       attackPointsEarned: halfPool,
       defensePointsEarned: 0,
@@ -1350,10 +1350,10 @@ export function simulateClash(
     activeLineNumber: matchingCatchLine,
     skippedLineNumbers: skippedLinesInTry,
     inlineBadge: defense.swallowsErrorSilently
-      ? '⚠️ Пустой catch: сбой проглочен!'
+      ? '[SILENT CATCH] Ошибка скрыта от лога'
       : defense.resetsStackTrace
-      ? '⚠️ throw ex: стек стёрт!'
-      : `🛡️ Перехвачено в catch (${attack.throwsException})`,
+      ? '[CA2200] throw ex перезаписал StackTrace'
+      : `[CATCH] Перехвачено исключение (${attack.throwsException})`,
     statusBanner: `Шаг 3: Управление прыгнуло в блок catch на строке ${matchingCatchLine}.`,
     stepKind: 'catch',
     dbState: initialDb,
@@ -1371,7 +1371,7 @@ export function simulateClash(
         stepIndex: 4,
         activeLineNumber: finallyLineObj.lineNumber,
         skippedLineNumbers: skippedLinesInTry,
-        inlineBadge: '🔒 finally: db.Close() закрыл БД!',
+        inlineBadge: '[FINALLY] db.Close() закрыл соединение',
         statusBanner:
           'Шаг 4: После блока catch гарантированно сработал блок finally и закрыл соединение с БД.',
         stepKind: 'finally',
@@ -1384,7 +1384,7 @@ export function simulateClash(
         stepIndex: 4,
         activeLineNumber: defense.patchedLines.length,
         skippedLineNumbers: skippedLinesInTry,
-        inlineBadge: '🔴 УТЕЧКА: БД осталась открытой!',
+        inlineBadge: '[LEAK] Соединение с БД осталось открытым',
         statusBanner:
           'Шаг 4: Исключение поймали, но db.Close() остался в пропущенной части try! Соединение утекло.',
         stepKind: 'leak',
@@ -1395,7 +1395,7 @@ export function simulateClash(
 
       return {
         outcome: 'BREACHED',
-        headline: '💥 ЩИТ ПРОБИТ! Исключение поймано, но соединение с БД утекло',
+        headline: 'ПРОБИТИЕ ЗАЩИТЫ: исключение перехвачено, но соединение с БД утекло',
         reasonDetailed:
           'Вызов db.Close() находился внутри try после опасной строки и был пропущен при прыжке в catch. Без finally база данных осталась висеть открытой!',
         attackPointsEarned: halfPool,
@@ -1412,7 +1412,7 @@ export function simulateClash(
   if (defense.swallowsErrorSilently) {
     return {
       outcome: 'BREACHED',
-      headline: '💥 ДИВЕРСИЯ УДАЛАСЬ! Пустой catch {} скрыл атаку от журнала',
+      headline: 'ПРОБИТИЕ ЗАЩИТЫ: пустой блок catch {} скрыл сбой от журнала',
       reasonDetailed:
         'Защита поставила пустой блок catch: программа промолчала, в AuditLog не попало ни одной записи, и атака осталась незамеченной!',
       attackPointsEarned: halfPool,
@@ -1427,7 +1427,7 @@ export function simulateClash(
   if (defense.resetsStackTrace) {
     return {
       outcome: 'BREACHED',
-      headline: '💥 УЛИКИ УНИЧТОЖЕНЫ (CA2200)! Инструкция throw ex; стёрла стек вызовов',
+      headline: 'ПРОБИТИЕ ЗАЩИТЫ (CA2200): инструкция throw ex; стёрла стек вызовов',
       reasonDetailed:
         'Защита написала throw ex; вместо чистого throw;. Из-за этого исходный номер строки падения в StackTrace был перезаписан!',
       attackPointsEarned: halfPool,
@@ -1444,7 +1444,7 @@ export function simulateClash(
     const partialPts = Math.round(halfPool / 2);
     return {
       outcome: 'PARTIAL',
-      headline: '⚠️ ЧАСТИЧНЫЙ ПЕРЕХВАТ: Слепой catch (Exception) без точного типа',
+      headline: 'ЧАСТИЧНЫЙ ПЕРЕХВАТ: общий catch (Exception) вместо точного типа',
       reasonDetailed:
         'Падение остановлено, но общий catch (Exception) скрыл конкретный тип сбоя. Защита получает только половину очков за ход!',
       attackPointsEarned: halfPool - partialPts,
@@ -1458,7 +1458,7 @@ export function simulateClash(
 
   return {
     outcome: 'REPELLED',
-    headline: `🛡️ УДАР ПОЛНОСТЬЮ ОТРАЖЁН! Перехвачен ${attack.throwsException}`,
+    headline: `ЗАЩИТА УСТОЯЛА: прицельно обработан ${attack.throwsException}`,
     reasonDetailed: `Щит Защиты прицельно перехватил ${attack.throwsException}, зафиксировал детали в логе и сохранил целостность всех ресурсов.`,
     attackPointsEarned: 0,
     defensePointsEarned: halfPool,

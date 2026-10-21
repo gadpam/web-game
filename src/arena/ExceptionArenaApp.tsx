@@ -17,14 +17,30 @@ import {
 import { CSharpLineSyntax } from './CSharpCodeHighlighter';
 import '../styles/arena.css';
 
+// Векторный указатель текущей строки отладчика (Instruction Pointer в стиле Visual Studio / Rider)
+const DebuggerPointerIcon: React.FC = () => (
+  <svg
+    className="arena-ip-arrow"
+    viewBox="0 0 16 16"
+    aria-hidden="true"
+  >
+    <path d="M2 3.5h6.2L13.5 8l-5.3 4.5H2V3.5z" />
+  </svg>
+);
+
 export const ExceptionArenaApp: React.FC = () => {
   const [state, rawDispatch] = useReducer(arenaReducer, undefined, loadArenaState);
   const [deviceRole, setDeviceRole] = useState<DeviceRole>('projector');
+  const [drumSpinning, setDrumSpinning] = useState(false);
+  const [drumDisplaySlot, setDrumDisplaySlot] = useState<number>(
+    state.roulettePlayerNum
+  );
+
   const syncRef = useRef<ReturnType<typeof createArenaSyncChannel> | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // Подключаем мгновенную синхронизацию вкладок/окон (Проектор <-> Ноутбук Альфа <-> Ноутбук Бета)
+  // Синхронизация вкладок и окон (Проектор <-> Терминал Альфа <-> Терминал Бета)
   useEffect(() => {
     const channel = createArenaSyncChannel((remoteState) => {
       stateRef.current = remoteState;
@@ -34,7 +50,6 @@ export const ExceptionArenaApp: React.FC = () => {
     return () => channel.close();
   }, []);
 
-  // Обёртка dispatch с публикацией в localStorage + BroadcastChannel
   const dispatch = (action: ArenaAction) => {
     const next = arenaReducer(stateRef.current, action);
     stateRef.current = next;
@@ -43,7 +58,6 @@ export const ExceptionArenaApp: React.FC = () => {
     syncRef.current?.publish(next);
   };
 
-  // Слушаем внешние изменения из других вкладок через storage
   useEffect(() => {
     const handleStorage = () => {
       const loaded = loadArenaState();
@@ -56,7 +70,11 @@ export const ExceptionArenaApp: React.FC = () => {
 
   // Секундный таймер раунда
   useEffect(() => {
-    if (!state.timerRunning || state.stage !== 'round' || state.subPhase !== 'planning') {
+    if (
+      !state.timerRunning ||
+      state.stage !== 'round' ||
+      state.subPhase !== 'planning'
+    ) {
       return;
     }
     const id = window.setInterval(() => {
@@ -65,7 +83,37 @@ export const ExceptionArenaApp: React.FC = () => {
     return () => window.clearInterval(id);
   }, [state.timerRunning, state.stage, state.subPhase]);
 
-  // Горячие клавиши ведущего на проекторе (Пробел / Стрелки)
+  // Живое вращение механического селектора участников (01..06) при входе в фазу блиц-опроса
+  const triggerDrumSpin = (targetPlayer?: 1 | 2 | 3 | 4 | 5 | 6) => {
+    const finalSlot =
+      targetPlayer ??
+      (((Math.floor(Math.random() * 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6));
+    setDrumSpinning(true);
+
+    const delays = [55, 65, 75, 90, 110, 135, 165, 200, 245];
+    let step = 0;
+    let current = drumDisplaySlot;
+
+    const tick = () => {
+      if (step < delays.length) {
+        current = (current % 6) + 1;
+        setDrumDisplaySlot(current);
+        step += 1;
+        window.setTimeout(tick, delays[step - 1]);
+      } else {
+        setDrumDisplaySlot(finalSlot);
+        setDrumSpinning(false);
+        dispatch({ type: 'SET_ROULETTE_PLAYER', playerNum: finalSlot });
+      }
+    };
+    tick();
+  };
+
+  useEffect(() => {
+    setDrumDisplaySlot(state.roulettePlayerNum);
+  }, [state.roulettePlayerNum]);
+
+  // Горячие клавиши ведущего на проекторе (F5 / Пробел / Стрелки)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (
@@ -74,7 +122,12 @@ export const ExceptionArenaApp: React.FC = () => {
       ) {
         return;
       }
-      if (state.stage === 'round' && state.subPhase === 'tracing') {
+      if (state.stage === 'round' && state.subPhase === 'planning') {
+        if (e.key === 'F5') {
+          e.preventDefault();
+          dispatch({ type: 'LAUNCH_CLASH' });
+        }
+      } else if (state.stage === 'round' && state.subPhase === 'tracing') {
         if (e.key === 'ArrowRight' || e.key === ' ') {
           e.preventDefault();
           const round =
@@ -136,7 +189,7 @@ export const ExceptionArenaApp: React.FC = () => {
     [currentRound, activeAttackId, activeDefenseId]
   );
 
-  // Определяем, показывать ли живой патч в окне C#-кода
+  // Живая вставка выбранного патча try/catch/finally в окно редактора
   const previewDefenseId = useMemo(() => {
     if (state.subPhase === 'planning') {
       const isDefenseLaptop =
@@ -175,12 +228,10 @@ export const ExceptionArenaApp: React.FC = () => {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  // Определяем роль текущего ноутбука (если выбран режим ноутбука)
   const laptopTeamId =
     deviceRole === 'ALPHA' ? 'ALPHA' : deviceRole === 'BETA' ? 'BETA' : null;
   const isLaptopAttacker = laptopTeamId === attacker;
 
-  // Маппинг вида шага на CSS-класс подсветки строки
   const getStepTraceClass = (stepKind?: string) => {
     if (!stepKind) return '';
     if (stepKind === 'normal' || stepKind === 'done') return 'trace-ok';
@@ -194,46 +245,55 @@ export const ExceptionArenaApp: React.FC = () => {
   return (
     <div className={`arena-root ${state.lightTheme ? 'theme-light' : ''}`}>
       {/* ====================================================================
-          ПРАВИЛО №1: ЕДИНСТВЕННАЯ ВЕРХНЯЯ ПАНЕЛЬ 56px
+          ВЕРХНЯЯ ИНЖЕНЕРНАЯ ПАНЕЛЬ 52px
           ==================================================================== */}
       <header className="arena-topbar">
         <button
           type="button"
           className="arena-brand"
           onClick={() => dispatch({ type: 'GO_TO_WELCOME' })}
-          title="Вернуться на стартовый экран выбора роли"
+          title="Вернуться к выбору рабочего терминала"
         >
-          <span className="arena-brand-badge">C# CLR</span>
-          <span>Exception Arena: Атака vs Защита</span>
+          <span className="arena-brand-badge">CLR .NET 8</span>
+          <span>C# Exception Arena</span>
         </button>
 
-        {/* Сегментированный переключатель роли устройства (Правило №4: никаких <select>!) */}
-        <div className="arena-role-pills" role="group" aria-label="Режим экрана">
+        {/* Сегментированный переключатель терминала */}
+        <div className="arena-role-pills" role="group" aria-label="Режим терминала">
           <button
             type="button"
             className={`arena-pill-btn ${deviceRole === 'projector' ? 'active' : ''}`}
             onClick={() => setDeviceRole('projector')}
           >
-            📽️ Проектор
+            <span
+              className={`arena-led ${deviceRole === 'projector' ? 'ok' : ''}`}
+            />
+            Экран доски
           </button>
           <button
             type="button"
             className={`arena-pill-btn ${deviceRole === 'ALPHA' ? 'active' : ''}`}
             onClick={() => setDeviceRole('ALPHA')}
           >
-            💻 Команда АЛЬФА
+            <span
+              className={`arena-led ${deviceRole === 'ALPHA' ? 'atk' : ''}`}
+            />
+            Пульт АЛЬФА
           </button>
           <button
             type="button"
             className={`arena-pill-btn ${deviceRole === 'BETA' ? 'active' : ''}`}
             onClick={() => setDeviceRole('BETA')}
           >
-            💻 Команда БЕТА
+            <span
+              className={`arena-led ${deviceRole === 'BETA' ? 'def' : ''}`}
+            />
+            Пульт БЕТА
           </button>
         </div>
 
         {/* Быстрая навигация по 4 раундам и Финалу */}
-        <div className="arena-round-pills" role="group" aria-label="Раунды урока">
+        <div className="arena-round-pills" role="group" aria-label="Раунды">
           {([1, 2, 3, 4] as RoundNumber[]).map((rNum) => {
             const isDone = Boolean(state.roundHistory[rNum]);
             const isCurrent =
@@ -247,7 +307,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 }`}
                 onClick={() => dispatch({ type: 'SELECT_ROUND', roundNumber: rNum })}
               >
-                {isDone ? '✓ ' : ''}Р{rNum}
+                R{rNum}
               </button>
             );
           })}
@@ -256,18 +316,23 @@ export const ExceptionArenaApp: React.FC = () => {
             className={`arena-pill-btn ${state.stage === 'finale' ? 'active' : ''}`}
             onClick={() => dispatch({ type: 'GO_TO_FINALE' })}
           >
-            🏆 Финал
+            Итог
           </button>
         </div>
 
-        {/* Табло счёта команд и таймер */}
+        {/* Табло счёта и управление средой */}
         <div className="arena-scoreboard">
           <div
             className={`arena-team-score ${
               attacker === 'ALPHA' ? 'is-attacking' : 'is-defending'
             }`}
           >
-            <span>{attacker === 'ALPHA' ? '⚡' : '🛡️'} АЛЬФА</span>
+            <span
+              className={`arena-role-tag ${attacker === 'ALPHA' ? 'atk' : 'def'}`}
+            >
+              {attacker === 'ALPHA' ? 'ATK' : 'DEF'}
+            </span>
+            <span>АЛЬФА</span>
             <span className="arena-score-num">{state.alphaScore}</span>
           </div>
 
@@ -276,7 +341,12 @@ export const ExceptionArenaApp: React.FC = () => {
               attacker === 'BETA' ? 'is-attacking' : 'is-defending'
             }`}
           >
-            <span>{attacker === 'BETA' ? '⚡' : '🛡️'} БЕТА</span>
+            <span
+              className={`arena-role-tag ${attacker === 'BETA' ? 'atk' : 'def'}`}
+            >
+              {attacker === 'BETA' ? 'ATK' : 'DEF'}
+            </span>
+            <span>БЕТА</span>
             <span className="arena-score-num">{state.betaScore}</span>
           </div>
 
@@ -285,9 +355,18 @@ export const ExceptionArenaApp: React.FC = () => {
               type="button"
               className={`arena-timer-pill ${state.timerSec <= 10 ? 'warning' : ''}`}
               onClick={() => dispatch({ type: 'TOGGLE_TIMER' })}
-              title="Нажмите для паузы / запуска таймера раунда"
+              title="Пауза / запуск таймера раунда"
             >
-              ⏱ {formatTimer(state.timerSec)}
+              <span
+                className={`arena-led ${
+                  state.timerRunning
+                    ? state.timerSec <= 10
+                      ? 'bad'
+                      : 'ok'
+                    : 'warn'
+                }`}
+              />
+              {formatTimer(state.timerSec)}
             </button>
           )}
 
@@ -295,54 +374,57 @@ export const ExceptionArenaApp: React.FC = () => {
             type="button"
             className="arena-icon-btn"
             onClick={() => dispatch({ type: 'TOGGLE_THEME' })}
-            title="Переключить светлую/тёмную тему для проектора"
+            title="Переключить контрастную тему для проектора"
           >
-            {state.lightTheme ? '🌙 Тёмная' : '☀️ Светлая'}
+            {state.lightTheme ? 'Тёмная схема' : 'Светлая схема'}
           </button>
 
           <button
             type="button"
             className="arena-icon-btn"
             onClick={() => dispatch({ type: 'RESET_ALL' })}
-            title="Сбросить игру к началу урока"
+            title="Сбросить состояние всех раундов"
           >
-            ↺ Сброс
+            Сброс
           </button>
         </div>
       </header>
 
       {/* ====================================================================
-          ЭКРАН 0: ПРИВЕТСТВИЕ И ВЫБОР УСТРОЙСТВА (WELCOME)
+          ЭКРАН 0: ИНЖЕНЕРНЫЙ СТАРТ И ВЫБОР РАБОЧЕГО МЕСТА
           ==================================================================== */}
       {state.stage === 'welcome' && (
         <main className="arena-welcome-wrap">
           <section className="arena-hero-card">
             <div className="arena-hero-top">
               <div>
+                <div className="arena-eyebrow">
+                  ПРАКТИКУМ ПО ОБРАБОТКЕ ИСКЛЮЧЕНИЙ C# · .NET CLR DEBUGGER
+                </div>
                 <h1 className="arena-hero-title">
-                  C# Exception Arena: Атака vs Защита
+                  C# Exception Arena: Атака и Защита кода
                 </h1>
                 <p className="arena-hero-sub">
-                  Командный поединок на 1 открытое занятие (45 мин). Одна команда
-                  ищет уязвимую строку C#-метода и бьёт входным снарядом, вторая —
-                  конструирует защиту <code>try / catch / finally</code> и держит
-                  ответ на слепой блиц-рулетке.
+                  Четыре раунда разбора реальных сбоев времени выполнения. Одна
+                  команда ищет уязвимую строку метода и подбирает входной вектор,
+                  вторая — встраивает конструкцию <code>try / catch / finally</code>{' '}
+                  и защищает решение на контрольном блиц-опросе.
                 </p>
               </div>
               <button
                 type="button"
                 className="arena-primary-cta"
-                style={{ width: 'auto', padding: '14px 26px' }}
+                style={{ width: 'auto', padding: '12px 22px' }}
                 onClick={() => {
                   setDeviceRole('projector');
                   dispatch({ type: 'START_GAME' });
                 }}
               >
-                🚀 Начать Раунд 1 на проекторе
+                Открыть Раунд 1 на доске
               </button>
             </div>
 
-            {/* 3 карточки выбора роли устройства (Вариант Б) */}
+            {/* 3 строгих терминала выбора роли устройства */}
             <div className="arena-device-grid">
               <button
                 type="button"
@@ -352,17 +434,19 @@ export const ExceptionArenaApp: React.FC = () => {
                   dispatch({ type: 'START_GAME' });
                 }}
               >
-                <span className="arena-device-badge">📽️ ЭКРАН У ДОСКИ</span>
+                <span className="arena-device-badge">
+                  <span className="arena-led ok" />
+                  ТЕРМИНАЛ 01 · ДОСКА / ПРОЕКТОР
+                </span>
                 <div>
-                  <h3>Режим Проектора (Ведущий)</h3>
+                  <h3>Центральный отладчик у доски</h3>
                   <p>
-                    Центральное окно C#-кода, статус запечатанных конвертов команд,
-                    пошаговая трассировка CLR, 3 датчика системы и слепая рулетка
-                    блиц-проверки.
+                    Окно метода C#, пошаговый указатель выполнения CLR, панель
+                    состояния ресурсов БД и стека вызовов, селектор блиц-опроса.
                   </p>
                 </div>
                 <span className="arena-device-cta">
-                  Открыть экран проектора →
+                  Запустить режим доски →
                 </span>
               </button>
 
@@ -374,16 +458,19 @@ export const ExceptionArenaApp: React.FC = () => {
                   dispatch({ type: 'START_GAME' });
                 }}
               >
-                <span className="arena-device-badge">💻 ПУЛЬТ КОМАНДЫ №1</span>
+                <span className="arena-device-badge">
+                  <span className="arena-led atk" />
+                  ТЕРМИНАЛ 02 · КОМАНДА АЛЬФА
+                </span>
                 <div>
-                  <h3>Ноутбук Команды АЛЬФА</h3>
+                  <h3>Рабочий пульт Команды АЛЬФА</h3>
                   <p>
-                    Раунды 1 и 3 — ⚡ Атака исключениями. Раунды 2 и 4 — 🛡️ Защита
-                    кода. Трёхшаговая цепочка хода для всех 6 участников команды.
+                    Раунды 1 и 3 — выбор уязвимой строки и входного пакета атаки.
+                    Раунды 2 и 4 — проектирование защитного блока в коде.
                   </p>
                 </div>
                 <span className="arena-device-cta">
-                  Войти за Команду АЛЬФА →
+                  Открыть пульт АЛЬФА →
                 </span>
               </button>
 
@@ -395,29 +482,31 @@ export const ExceptionArenaApp: React.FC = () => {
                   dispatch({ type: 'START_GAME' });
                 }}
               >
-                <span className="arena-device-badge">💻 ПУЛЬТ КОМАНДЫ №2</span>
+                <span className="arena-device-badge">
+                  <span className="arena-led def" />
+                  ТЕРМИНАЛ 03 · КОМАНДА БЕТА
+                </span>
                 <div>
-                  <h3>Ноутбук Команды БЕТА</h3>
+                  <h3>Рабочий пульт Команды БЕТА</h3>
                   <p>
-                    Раунды 1 и 3 — 🛡️ Защита кода. Раунды 2 и 4 — ⚡ Атака
-                    исключениями. Живой предпросмотр патча <code>try/catch</code> и
-                    голосовые коды.
+                    Раунды 1 и 3 — проектирование защитного блока в коде. Раунды 2
+                    и 4 — поиск уязвимой строки и атака входными данными.
                   </p>
                 </div>
                 <span className="arena-device-cta">
-                  Войти за Команду БЕТА →
+                  Открыть пульт БЕТА →
                 </span>
               </button>
             </div>
 
-            {/* Прогрессия 4 раундов урока с растущими ставками */}
+            {/* Спецификация 4 раундов */}
             <div className="arena-rounds-preview">
               {ARENA_ROUNDS.map((r) => (
                 <div key={r.number} className="arena-round-mini">
                   <div className="arena-round-mini-top">
-                    <span>РАУНД {r.number}</span>
+                    <span>РАУНД 0{r.number}</span>
                     <span className="arena-round-mini-pts">
-                      {r.maxPoints} очков
+                      {r.maxPoints} PTS
                     </span>
                   </div>
                   <h4>{r.title}</h4>
@@ -433,7 +522,7 @@ export const ExceptionArenaApp: React.FC = () => {
       )}
 
       {/* ====================================================================
-          ЭКРАН 1..4: РАБОЧАЯ АРЕНА РАУНДА (ПРОЕКТОР ИЛИ НОУТБУК КОМАНДЫ)
+          ЭКРАН 1..4: РАБОЧАЯ СРЕДА РАУНДА (SPLIT-PANE IDE)
           ==================================================================== */}
       {state.stage === 'round' && (
         <main className="arena-stage-main">
@@ -447,20 +536,20 @@ export const ExceptionArenaApp: React.FC = () => {
             />
             <div className="arena-round-title-group">
               <span className="arena-round-num-tag">
-                РАУНД {currentRound.number} / 4 · {currentRound.maxPoints} ОЧКОВ
+                R0{currentRound.number} · {currentRound.maxPoints} ОЧКОВ
               </span>
               <div className="arena-round-heading">
                 <h2>
-                  {currentRound.title} —{' '}
-                  <span style={{ color: 'var(--arena-text-muted)', fontWeight: 600 }}>
-                    {currentRound.subtitle}
+                  {currentRound.title}{' '}
+                  <span style={{ color: 'var(--arena-text-muted)', fontWeight: 400 }}>
+                    / {currentRound.subtitle}
                   </span>
                 </h2>
                 <p>{currentRound.engineeringNote}</p>
               </div>
             </div>
 
-            {/* Переключатель 4 последовательных фаз раунда (Правило №3) */}
+            {/* Переключатель 4 последовательных состояний */}
             <div className="arena-subphase-steps">
               <button
                 type="button"
@@ -474,7 +563,7 @@ export const ExceptionArenaApp: React.FC = () => {
                   })
                 }
               >
-                1. Ход команд
+                01 Постановка хода
               </button>
               <button
                 type="button"
@@ -483,16 +572,19 @@ export const ExceptionArenaApp: React.FC = () => {
                 }`}
                 onClick={() => dispatch({ type: 'LAUNCH_CLASH' })}
               >
-                2. Трассировка CLR
+                02 Отладчик CLR
               </button>
               <button
                 type="button"
                 className={`arena-step-chip ${
                   state.subPhase === 'roulette' ? 'active' : ''
                 }`}
-                onClick={() => dispatch({ type: 'OPEN_ROULETTE' })}
+                onClick={() => {
+                  dispatch({ type: 'OPEN_ROULETTE' });
+                  triggerDrumSpin(state.roulettePlayerNum);
+                }}
               >
-                3. Блиц-рулетка
+                03 Блиц-опрос
               </button>
               <button
                 type="button"
@@ -501,42 +593,29 @@ export const ExceptionArenaApp: React.FC = () => {
                 }`}
                 onClick={() => dispatch({ type: 'OPEN_SUMMARY' })}
               >
-                4. Разбор и правило
+                04 Разбор кода
               </button>
             </div>
           </section>
 
-          {/* Рабочая двухколоночная сетка */}
+          {/* Двухколоночная сплит-сетка */}
           <div className="arena-work-grid">
             {/* ==============================================================
-                ЛЕВАЯ КОЛОНКА: ОКНО C# IDE С ЖИВЫМ DIFF И 3 ДАТЧИКАМИ СИСТЕМЫ
+                ЛЕВАЯ ПАНЕЛЬ: C# РЕДАКТОР + НИЖНИЙ ДОК ТЕЛЕМЕТРИИ CLR
                 ============================================================== */}
             <section className="arena-ide-column">
               <div className="arena-ide-window">
                 <div className="arena-ide-header">
                   <div className="arena-ide-file">
-                    <div className="arena-ide-dots">
-                      <span
-                        className="arena-ide-dot"
-                        style={{ background: '#ef4444' }}
-                      />
-                      <span
-                        className="arena-ide-dot"
-                        style={{ background: '#f59e0b' }}
-                      />
-                      <span
-                        className="arena-ide-dot"
-                        style={{ background: '#10b981' }}
-                      />
-                    </div>
+                    <span className="arena-ide-tab-indicator" />
                     <span>ArenaService.cs — {currentRound.methodSignature}</span>
                   </div>
                   <span style={{ color: 'var(--arena-text-muted)' }}>
                     {state.subPhase === 'planning'
-                      ? 'Шаг 1: кликните по опасной строке кода'
+                      ? 'Шаг 1: выберите строку в коде кликом мыши'
                       : previewDefenseId
-                      ? `Патч Защиты: ${previewDefenseId}`
-                      : 'Исходный код'}
+                      ? `Активная конфигурация защиты: ${previewDefenseId}`
+                      : 'Исходный метод без защиты'}
                   </span>
                 </div>
 
@@ -609,21 +688,34 @@ export const ExceptionArenaApp: React.FC = () => {
                           }
                         }}
                       >
+                        {/* Колонка отладчика: жёлтый указатель инструкции (▶) или точка прицела (●) */}
+                        <span className="arena-gutter-marker">
+                          {isActiveTrace ? (
+                            <DebuggerPointerIcon />
+                          ) : isAtkTarget ? (
+                            <span className="arena-bp-dot atk" />
+                          ) : isDefTarget ? (
+                            <span className="arena-bp-dot def" />
+                          ) : null}
+                        </span>
+
                         <span className="arena-line-num">
                           {lineObj.isAddedPatch ? '+' : lineObj.lineNumber}
                         </span>
+
                         <span className="arena-line-text">
                           <CSharpLineSyntax code={lineObj.code} />
                         </span>
+
                         <span className="arena-line-badges">
                           {isAtkTarget && (
                             <span className="arena-inline-badge target-badge-atk">
-                              🎯 Строка атаки
+                              ATK LINE {lineObj.lineNumber}
                             </span>
                           )}
                           {isDefTarget && (
                             <span className="arena-inline-badge target-badge-def">
-                              🛡️ Точка защиты
+                              DEF LINE {lineObj.lineNumber}
                             </span>
                           )}
                           {isActiveTrace && activeStep?.inlineBadge && (
@@ -633,7 +725,7 @@ export const ExceptionArenaApp: React.FC = () => {
                           )}
                           {isSkipped && (
                             <span className="arena-inline-badge skip-badge">
-                              ⏭ ПРОПУЩЕНО
+                              ПРОПУЩЕНО
                             </span>
                           )}
                         </span>
@@ -643,90 +735,141 @@ export const ExceptionArenaApp: React.FC = () => {
                 </div>
               </div>
 
-              {/* 3 ФИЗИЧЕСКИХ ДАТЧИКА СИСТЕМЫ ПОД КОДОМ (Правило №11) */}
-              <div className="arena-sensors-row">
-                <div
-                  className={`arena-sensor-card ${
-                    state.subPhase === 'planning'
-                      ? ''
-                      : simulation.finalDbState === 'LEAK'
-                      ? 'status-bad'
-                      : 'status-good'
-                  }`}
-                >
-                  <div className="arena-sensor-label">
-                    <span>🔌 ДАТЧИК 1: Соединение БД</span>
-                    <span>IDisposable / finally</span>
-                  </div>
-                  <div className="arena-sensor-value">
+              {/* НИЖНИЙ ДОК ТЕЛЕМЕТРИИ СРЕДЫ CLR */}
+              <div className="arena-telemetry-dock">
+                <div className="arena-telemetry-header">
+                  <span>
+                    CLR TELEMETRY //{' '}
                     {state.subPhase === 'planning'
-                      ? '⏳ Ожидание запуска метода'
-                      : simulation.finalDbState === 'LEAK'
-                      ? '🚨 ЗАВИСЛО В ПАМЯТИ (Утечка!)'
-                      : '✅ ЗАКРЫТО (db.Close выполнен)'}
-                  </div>
+                      ? 'Ожидание запуска метода (нажмите F5 или кнопку выполнения)'
+                      : activeStep
+                      ? activeStep.statusBanner
+                      : simulation.headline}
+                  </span>
+                  <span>.NET 8.0 Runtime</span>
                 </div>
 
-                <div
-                  className={`arena-sensor-card ${
-                    state.subPhase === 'planning'
-                      ? ''
-                      : simulation.finalLogState === 'SWALLOWED'
-                      ? 'status-bad'
-                      : simulation.finalLogState === 'LOGGED'
-                      ? 'status-good'
-                      : ''
-                  }`}
-                >
-                  <div className="arena-sensor-label">
-                    <span>📋 ДАТЧИК 2: Журнал ошибок</span>
-                    <span>ex.Message</span>
+                <div className="arena-sensors-row">
+                  <div
+                    className={`arena-sensor-card ${
+                      state.subPhase === 'planning'
+                        ? ''
+                        : simulation.finalDbState === 'LEAK'
+                        ? 'status-bad'
+                        : 'status-good'
+                    }`}
+                  >
+                    <div className="arena-sensor-label">
+                      <span>01 / DB_CONNECTION</span>
+                      <span>IDisposable</span>
+                    </div>
+                    <div className="arena-sensor-value">
+                      <span
+                        className={`arena-led ${
+                          state.subPhase === 'planning'
+                            ? ''
+                            : simulation.finalDbState === 'LEAK'
+                            ? 'bad'
+                            : 'ok'
+                        }`}
+                      />
+                      <span>
+                        {state.subPhase === 'planning'
+                          ? 'STANDBY (не открыто)'
+                          : simulation.finalDbState === 'LEAK'
+                          ? 'LEAKED (соединение зависло)'
+                          : 'CLOSED (освобождено штатно)'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="arena-sensor-value">
-                    {state.subPhase === 'planning'
-                      ? '⏳ Журнал чист'
-                      : simulation.finalLogState === 'SWALLOWED'
-                      ? '🚨 ПУСТО (Ошибка проглочена!)'
-                      : simulation.finalLogState === 'LOGGED'
-                      ? '✅ ЗАПИСАНО в лог мониторинга'
-                      : 'ℹ️ Штатный режим'}
-                  </div>
-                </div>
 
-                <div
-                  className={`arena-sensor-card ${
-                    state.subPhase === 'planning'
-                      ? ''
-                      : simulation.finalStackState === 'RESET'
-                      ? 'status-warn'
-                      : simulation.outcome === 'BREACHED'
-                      ? 'status-bad'
-                      : 'status-good'
-                  }`}
-                >
-                  <div className="arena-sensor-label">
-                    <span>🧭 ДАТЧИК 3: StackTrace</span>
-                    <span>throw; vs throw ex;</span>
+                  <div
+                    className={`arena-sensor-card ${
+                      state.subPhase === 'planning'
+                        ? ''
+                        : simulation.finalLogState === 'SWALLOWED'
+                        ? 'status-bad'
+                        : simulation.finalLogState === 'LOGGED'
+                        ? 'status-good'
+                        : ''
+                    }`}
+                  >
+                    <div className="arena-sensor-label">
+                      <span>02 / AUDIT_LOG</span>
+                      <span>ex.Message</span>
+                    </div>
+                    <div className="arena-sensor-value">
+                      <span
+                        className={`arena-led ${
+                          state.subPhase === 'planning'
+                            ? ''
+                            : simulation.finalLogState === 'SWALLOWED'
+                            ? 'bad'
+                            : simulation.finalLogState === 'LOGGED'
+                            ? 'ok'
+                            : ''
+                        }`}
+                      />
+                      <span>
+                        {state.subPhase === 'planning'
+                          ? 'STANDBY (записей: 0)'
+                          : simulation.finalLogState === 'SWALLOWED'
+                          ? 'SILENT_DROP (ошибка скрыта)'
+                          : simulation.finalLogState === 'LOGGED'
+                          ? 'WRITTEN (событие записано)'
+                          : 'NO_ERROR (штатный возврат)'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="arena-sensor-value">
-                    {state.subPhase === 'planning'
-                      ? '⏳ Стек вызовов CLR'
-                      : simulation.finalStackState === 'RESET'
-                      ? '⚠️ СТЁРТ (throw ex сбросил строку!)'
-                      : simulation.outcome === 'BREACHED'
-                      ? '💥 СБОЙ ИЛИ ПРОБИТИЕ ЗАЩИТЫ'
-                      : '✅ СОХРАНЕН (строка видна)'}
+
+                  <div
+                    className={`arena-sensor-card ${
+                      state.subPhase === 'planning'
+                        ? ''
+                        : simulation.finalStackState === 'RESET'
+                        ? 'status-warn'
+                        : simulation.outcome === 'BREACHED'
+                        ? 'status-bad'
+                        : 'status-good'
+                    }`}
+                  >
+                    <div className="arena-sensor-label">
+                      <span>03 / CALL_STACK</span>
+                      <span>StackTrace</span>
+                    </div>
+                    <div className="arena-sensor-value">
+                      <span
+                        className={`arena-led ${
+                          state.subPhase === 'planning'
+                            ? ''
+                            : simulation.finalStackState === 'RESET'
+                            ? 'warn'
+                            : simulation.outcome === 'BREACHED'
+                            ? 'bad'
+                            : 'ok'
+                        }`}
+                      />
+                      <span>
+                        {state.subPhase === 'planning'
+                          ? 'STANDBY (стек чист)'
+                          : simulation.finalStackState === 'RESET'
+                          ? 'RESET_CA2200 (стёрт через throw ex)'
+                          : simulation.outcome === 'BREACHED'
+                          ? 'UNHANDLED_FAULT (аварийный выход)'
+                          : 'INTACT (исходная строка сохранена)'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             </section>
 
             {/* ==============================================================
-                ПРАВАЯ КОЛОНКА: ПАНЕЛЬ АКТИВНОЙ ФАЗЫ (ПРОЕКТОР ИЛИ НОУТБУК)
+                ПРАВАЯ ПАНЕЛЬ: КОНТРОЛЛЕР АКТИВНОЙ ФАЗЫ РАУНДА
                 ============================================================== */}
             <section className="arena-phase-column">
               {/* ------------------------------------------------------------
-                  ВАРИАНТ 1: ФАЗА ПЛАНИРОВАНИЯ НА КОМАНДНОМ НОУТБУКЕ (АЛЬФА/БЕТА)
+                  ВАРИАНТ 1: ПУЛЬТ КОМАНДНОГО НОУТБУКА (АЛЬФА / БЕТА)
                   ------------------------------------------------------------ */}
               {state.subPhase === 'planning' && laptopTeamId && (
                 <div className="arena-phase-panel">
@@ -736,34 +879,35 @@ export const ExceptionArenaApp: React.FC = () => {
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        marginBottom: '8px',
+                        marginBottom: '10px',
                       }}
                     >
+                      <span className="arena-device-badge">
+                        <span
+                          className={`arena-led ${
+                            isLaptopAttacker ? 'atk' : 'def'
+                          }`}
+                        />
+                        {isLaptopAttacker
+                          ? `КОМАНДА ${
+                              laptopTeamId === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'
+                            } // РОЛЬ: АТАКА`
+                          : `КОМАНДА ${
+                              laptopTeamId === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'
+                            } // РОЛЬ: ЗАЩИТА`}
+                      </span>
                       <span
-                        className="arena-device-badge"
                         style={{
-                          background: isLaptopAttacker
-                            ? 'var(--arena-attack-bg)'
-                            : 'var(--arena-defense-bg)',
-                          color: isLaptopAttacker
-                            ? 'var(--arena-attack)'
-                            : 'var(--arena-defense)',
+                          fontFamily: 'var(--arena-font-mono)',
+                          fontSize: '11px',
+                          fontWeight: 700,
                         }}
                       >
-                        {isLaptopAttacker
-                          ? `⚡ ${
-                              laptopTeamId === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'
-                            } — В АТАКЕ`
-                          : `🛡️ ${
-                              laptopTeamId === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'
-                            } — В ЗАЩИТЕ`}
-                      </span>
-                      <span style={{ fontSize: '12px', fontWeight: 700 }}>
-                        Ставка раунда: {currentRound.maxPoints} очков
+                        Пул раунда: {currentRound.maxPoints} очк.
                       </span>
                     </div>
 
-                    {/* Трёхшаговая цепочка ролей для 6 учеников за ноутбуком */}
+                    {/* Трёхшаговый регламент для 6 участников за одним ноутбуком */}
                     <div className="arena-role-chain-steps">
                       <div
                         className={`arena-chain-box ${
@@ -776,19 +920,19 @@ export const ExceptionArenaApp: React.FC = () => {
                             : 'active'
                         }`}
                       >
-                        <strong>Шаг 1 (Игроки 1–2):</strong>
+                        <strong>Шаг 01 · Участники 1–2</strong>
                         <div>
                           {(
                             isLaptopAttacker
                               ? state.attackTargetLine
                               : state.defenseTargetLine
                           )
-                            ? `✓ Строка #${
+                            ? `Выбрана строка #${
                                 isLaptopAttacker
                                   ? state.attackTargetLine
                                   : state.defenseTargetLine
-                              } выбрана`
-                            : 'Кликните опасную строку C#-кода слева'}
+                              }`
+                            : 'Укажите опасную строку в коде слева'}
                         </div>
                       </div>
 
@@ -803,21 +947,21 @@ export const ExceptionArenaApp: React.FC = () => {
                             : 'active'
                         }`}
                       >
-                        <strong>Шаг 2 (Игроки 3–4):</strong>
+                        <strong>Шаг 02 · Участники 3–4</strong>
                         <div>
                           {(
                             isLaptopAttacker
                               ? state.selectedAttackId
                               : state.selectedDefenseId
                           )
-                            ? `✓ Выбран ход ${
+                            ? `Выбран вариант ${
                                 isLaptopAttacker
                                   ? state.selectedAttackId
                                   : state.selectedDefenseId
                               }`
                             : isLaptopAttacker
-                            ? 'Выберите снаряд А-1..А-3'
-                            : 'Выберите патч З-1..З-4'}
+                            ? 'Выберите входной пакет А-1..А-3'
+                            : 'Выберите патч защиты З-1..З-4'}
                         </div>
                       </div>
 
@@ -832,28 +976,25 @@ export const ExceptionArenaApp: React.FC = () => {
                             : ''
                         }`}
                       >
-                        <strong>Шаг 3 (Игроки 5–6):</strong>
+                        <strong>Шаг 03 · Участники 5–6</strong>
                         <div>
                           {(
                             isLaptopAttacker
                               ? state.attackLocked
                               : state.defenseLocked
                           )
-                            ? '🔒 Конверт запечатан!'
-                            : 'Запечатайте ход и готовьтесь к рулетке'}
+                            ? 'Решение зафиксировано'
+                            : 'Проверьте решение и зафиксируйте ход'}
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Карточки выбора только для своей роли (Атака ИЛИ Защита) */}
                   {isLaptopAttacker ? (
                     <div className="arena-voice-section">
                       <div className="arena-voice-group-label">
-                        <span>
-                          ⚡ ВЫБЕРИТЕ ВХОДНОЙ ПАКЕТ АТАКИ (или назовите голосом код
-                          А-1..А-3):
-                        </span>
+                        <span>Входные данные для вызова метода (Атака)</span>
+                        <span>Коды А-1 .. А-3</span>
                       </div>
                       <div className="arena-cards-list">
                         {currentRound.attackOptions.map((atk) => (
@@ -881,8 +1022,8 @@ export const ExceptionArenaApp: React.FC = () => {
                                   <code>{atk.payloadCode}</code>
                                 </span>
                                 <span className="arena-option-code">
-                                  Бьёт в строку #{atk.targetLine} · Цель:{' '}
-                                  {atk.expectedException} — {atk.shortDesc}
+                                  Строка #{atk.targetLine} · Ожидается:{' '}
+                                  {atk.expectedException} ({atk.shortDesc})
                                 </span>
                               </div>
                             </div>
@@ -893,10 +1034,8 @@ export const ExceptionArenaApp: React.FC = () => {
                   ) : (
                     <div className="arena-voice-section">
                       <div className="arena-voice-group-label">
-                        <span>
-                          🛡️ ВЫБЕРИТЕ ПАТЧ ЗАЩИТЫ (сразу вставляется в окно C#-кода
-                          слева):
-                        </span>
+                        <span>Варианты обработки в коде (Защита)</span>
+                        <span>Предпросмотр в редакторе слева</span>
                       </div>
                       <div className="arena-cards-list">
                         {currentRound.defenseOptions.map((def) => (
@@ -948,68 +1087,77 @@ export const ExceptionArenaApp: React.FC = () => {
                     {(
                       isLaptopAttacker ? state.attackLocked : state.defenseLocked
                     )
-                      ? '🔓 Разблокировать конверт (изменить ход)'
-                      : '🔒 ЗАПЕЧАТАТЬ ХОД КОМАНДЫ'}
+                      ? 'Снять фиксацию (изменить вариант)'
+                      : 'Зафиксировать командный ход'}
                   </button>
                 </div>
               )}
 
               {/* ------------------------------------------------------------
-                  ВАРИАНТ 2: ФАЗА ПЛАНИРОВАНИЯ НА ЭКРАНЕ ПРОЕКТОРА У ДОСКИ
+                  ВАРИАНТ 2: ЭКРАН ДОСКИ / ПРОЕКТОРА В ФАЗЕ ПОСТАНОВКИ ХОДА
                   ------------------------------------------------------------ */}
               {state.subPhase === 'planning' && !laptopTeamId && (
                 <div className="arena-phase-panel">
-                  {/* Конверты синхронного хода (Правило №12: защита от подглядывания!) */}
                   <div className="arena-envelopes-grid">
                     <div className="arena-envelope-box atk">
                       <div className="arena-envelope-top">
                         <span>
-                          ⚡ АТАКА ({attacker === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'})
+                          АТАКА // {attacker === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'}
                         </span>
                         <span
                           className={`arena-lock-badge ${
                             state.attackLocked ? 'locked' : 'waiting'
                           }`}
                         >
-                          {state.attackLocked ? '🔒 ЗАПЕЧАТАН' : '⏳ ВЫБИРАЕТ'}
+                          <span
+                            className={`arena-led ${
+                              state.attackLocked ? 'ok' : 'warn'
+                            }`}
+                          />
+                          {state.attackLocked ? 'ГОТОВО' : 'ВЫБОР ХОДА'}
                         </span>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
                         {state.attackLocked
-                          ? 'Конверт атаки готов к вскрытию на проекторе'
-                          : 'Команда выбирает опасную строку и снаряд А-1..А-3'}
+                          ? 'Вектор атаки зафиксирован и скрыт до запуска'
+                          : 'Команда выбирает строку и входной пакет А-1..А-3'}
                       </div>
                     </div>
 
                     <div className="arena-envelope-box def">
                       <div className="arena-envelope-top">
                         <span>
-                          🛡️ ЗАЩИТА ({defender === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'})
+                          ЗАЩИТА // {defender === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'}
                         </span>
                         <span
                           className={`arena-lock-badge ${
                             state.defenseLocked ? 'locked' : 'waiting'
                           }`}
                         >
-                          {state.defenseLocked ? '🔒 ЗАПЕЧАТАН' : '⏳ ВЫБИРАЕТ'}
+                          <span
+                            className={`arena-led ${
+                              state.defenseLocked ? 'ok' : 'warn'
+                            }`}
+                          />
+                          {state.defenseLocked ? 'ГОТОВО' : 'ВЫБОР ХОДА'}
                         </span>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
                         {state.defenseLocked
-                          ? 'Щит защиты готов к проверке компилятором C#'
-                          : 'Команда выбирает конструкцию З-1..З-4'}
+                          ? 'Конструкция защиты готова к компиляции'
+                          : 'Команда выбирает блок обработки З-1..З-4'}
                       </div>
                     </div>
                   </div>
 
-                  {/* Быстрый пульт голосовых кодов для ведущего у доски (А-1..А-3 и З-1..З-4) */}
+                  {/* Ввод кодов А-1..А-3 */}
                   <div className="arena-voice-section">
                     <div className="arena-voice-group-label">
-                      <span>⚡ СНАРЯДЫ АТАКИ (коды с места А-1..А-3):</span>
+                      <span>Входные данные (Атака)</span>
                       <span>
                         {state.attackTargetLine
-                          ? `Прицел: строка #${state.attackTargetLine}`
-                          : 'Кликните строку слева или код ниже'}
+                          ? `Цель: строка #${state.attackTargetLine}`
+                          : 'Кликните строку в коде или выберите код'}
                       </span>
                     </div>
                     <div className="arena-cards-list">
@@ -1039,8 +1187,8 @@ export const ExceptionArenaApp: React.FC = () => {
                                 <code>{atk.payloadCode}</code>
                               </span>
                               <span className="arena-option-code">
-                                Строка #{atk.targetLine} · Цель:{' '}
-                                {atk.expectedException} ({atk.shortDesc})
+                                Строка #{atk.targetLine} · {atk.expectedException}{' '}
+                                ({atk.shortDesc})
                               </span>
                             </div>
                           </div>
@@ -1049,9 +1197,11 @@ export const ExceptionArenaApp: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Ввод кодов З-1..З-4 */}
                   <div className="arena-voice-section">
                     <div className="arena-voice-group-label">
-                      <span>🛡️ ПАТЧИ ЗАЩИТЫ (коды с места З-1..З-4):</span>
+                      <span>Обработка исключений (Защита)</span>
+                      <span>Коды З-1 .. З-4</span>
                     </div>
                     <div className="arena-cards-list">
                       {currentRound.defenseOptions.map((def) => (
@@ -1094,20 +1244,23 @@ export const ExceptionArenaApp: React.FC = () => {
                     className="arena-primary-cta"
                     onClick={() => dispatch({ type: 'LAUNCH_CLASH' })}
                   >
-                    🚀 ВСКРЫТЬ КОНВЕРТЫ И ЗАПУСТИТЬ CLR-ТРАССИРОВКУ
+                    <kbd className="arena-kbd" style={{ background: 'rgba(0,0,0,0.25)', color: '#fff', borderColor: 'rgba(255,255,255,0.35)' }}>
+                      F5
+                    </kbd>
+                    <span>Скомпилировать патч и выполнить метод</span>
                   </button>
                 </div>
               )}
 
               {/* ------------------------------------------------------------
-                  ФАЗА 2: ПОШАГОВАЯ ТРАССИРОВКА CLR (TRACING)
+                  ФАЗА 2: ПОШАГОВЫЙ ОТЛАДЧИК CLR (TRACING)
                   ------------------------------------------------------------ */}
               {state.subPhase === 'tracing' && activeStep && (
                 <div className="arena-phase-panel">
                   <div className="arena-envelopes-grid">
                     <div className="arena-envelope-box atk">
                       <div className="arena-envelope-top">
-                        <span>⚡ ВЫБОР АТАКИ</span>
+                        <span>ПАКЕТ АТАКИ</span>
                         <span className="arena-voice-code atk">
                           {
                             currentRound.attackOptions.find(
@@ -1116,7 +1269,13 @@ export const ExceptionArenaApp: React.FC = () => {
                           }
                         </span>
                       </div>
-                      <div style={{ fontSize: '13px', fontWeight: 700 }}>
+                      <div
+                        style={{
+                          fontFamily: 'var(--arena-font-mono)',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                        }}
+                      >
                         {
                           currentRound.attackOptions.find(
                             (a) => a.id === activeAttackId
@@ -1127,7 +1286,7 @@ export const ExceptionArenaApp: React.FC = () => {
 
                     <div className="arena-envelope-box def">
                       <div className="arena-envelope-top">
-                        <span>🛡️ ВЫБОР ЗАЩИТЫ</span>
+                        <span>ПАТЧ ЗАЩИТЫ</span>
                         <span className="arena-voice-code def">
                           {
                             currentRound.defenseOptions.find(
@@ -1136,7 +1295,7 @@ export const ExceptionArenaApp: React.FC = () => {
                           }
                         </span>
                       </div>
-                      <div style={{ fontSize: '13px', fontWeight: 700 }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700 }}>
                         {
                           currentRound.defenseOptions.find(
                             (d) => d.id === activeDefenseId
@@ -1149,7 +1308,7 @@ export const ExceptionArenaApp: React.FC = () => {
                   <div className="arena-trace-explanation">
                     <div className="arena-trace-step-header">
                       <span>
-                        ШАГ ТРАССИРОВКИ {state.traceStepIdx + 1} ИЗ{' '}
+                        ШАГ ОТЛАДЧИКА {state.traceStepIdx + 1} /{' '}
                         {simulation.steps.length} · СТРОКА #
                         {activeStep.activeLineNumber}
                       </span>
@@ -1162,15 +1321,15 @@ export const ExceptionArenaApp: React.FC = () => {
 
                   {activeStep.skippedLineNumbers.length > 0 && (
                     <div className="arena-rule-card">
-                      <h4>⏭ Правило управления потоком C#</h4>
+                      <h4>Невыполненные инструкции внутри блока try</h4>
                       <p>
-                        После выброса исключения строки{' '}
+                        После генерации исключения строки{' '}
                         <code>
                           #{activeStep.skippedLineNumbers.join(', #')}
                         </code>{' '}
-                        внутри блока <code>try</code> мгновенно пропускаются —
-                        управление летит напрямую в подходящий <code>catch</code>{' '}
-                        или <code>finally</code>!
+                        в блоке <code>try</code> пропускаются: среда CLR сразу
+                        разворачивает стек к подходящему блоку <code>catch</code>{' '}
+                        и секции <code>finally</code>.
                       </p>
                     </div>
                   )}
@@ -1187,7 +1346,8 @@ export const ExceptionArenaApp: React.FC = () => {
                         })
                       }
                     >
-                      ◀ Шаг назад
+                      <kbd className="arena-kbd">←</kbd>
+                      <span>Предыдущий шаг</span>
                     </button>
                     <button
                       type="button"
@@ -1205,42 +1365,64 @@ export const ExceptionArenaApp: React.FC = () => {
                         })
                       }
                     >
-                      Шаг вперёд ▶
+                      <span>Следующий шаг (Step Over)</span>
+                      <kbd className="arena-kbd">→</kbd>
                     </button>
                   </div>
 
                   <button
                     type="button"
                     className="arena-primary-cta"
-                    onClick={() => dispatch({ type: 'OPEN_ROULETTE' })}
+                    onClick={() => {
+                      dispatch({ type: 'OPEN_ROULETTE' });
+                      triggerDrumSpin(state.roulettePlayerNum);
+                    }}
                   >
-                    🎰 КРУТИТЬ СЛЕПУЮ РУЛЕТКУ БЛИЦ-ВОПРОСА (+
-                    {Math.round(currentRound.maxPoints / 2)} ОЧКОВ)
+                    Перейти к контрольному блиц-опросу (+
+                    {Math.round(currentRound.maxPoints / 2)} очк.)
                   </button>
                 </div>
               )}
 
               {/* ------------------------------------------------------------
-                  ФАЗА 3: СЛЕПАЯ РУЛЕТКА БЛИЦ-ВОПРОСА (ПРОТИВ «ОДНОГО ОТЛИЧНИКА»)
+                  ФАЗА 3: МЕХАНИЧЕСКИЙ СЕЛЕКТОР ОТВЕЧАЮЩЕГО (01..06)
                   ------------------------------------------------------------ */}
               {state.subPhase === 'roulette' && (
                 <div className="arena-phase-panel">
                   <div className="arena-roulette-box">
                     <div className="arena-roulette-header">
-                      <span className="arena-player-call-badge">
-                        🎯 ОТВЕЧАЕТ УЧАСТНИК №{state.roulettePlayerNum} (БЕЗ
-                        ПОДСКАЗОК!)
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: 'var(--arena-font-mono)',
-                          fontWeight: 800,
-                          fontSize: '13px',
-                        }}
+                      <div>
+                        <div className="arena-eyebrow" style={{ marginBottom: '2px' }}>
+                          КОНТРОЛЬ ПОНИМАНИЯ КОДА (БЕЗ ПОДСКАЗОК КОМАНДЫ)
+                        </div>
+                        <div style={{ fontSize: '13px', fontWeight: 700 }}>
+                          Отвечает Участник №0{drumDisplaySlot} · На кону вторые 50%
+                          очков раунда (+{Math.round(currentRound.maxPoints / 2)}{' '}
+                          очк.)
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="arena-icon-btn"
+                        disabled={drumSpinning}
+                        onClick={() => triggerDrumSpin()}
                       >
-                        На кону вторые 50% очков (+
-                        {Math.round(currentRound.maxPoints / 2)} очк.)
-                      </span>
+                        {drumSpinning ? 'Выбор...' : 'Выбрать случайный №'}
+                      </button>
+                    </div>
+
+                    {/* Живая 6-секционная шкала выбора участника 01..06 */}
+                    <div className="arena-drum-strip">
+                      {[1, 2, 3, 4, 5, 6].map((num) => (
+                        <div
+                          key={num}
+                          className={`arena-drum-slot ${
+                            drumDisplaySlot === num ? 'active-slot' : ''
+                          }`}
+                        >
+                          УЧ. 0{num}
+                        </div>
+                      ))}
                     </div>
 
                     <p className="arena-roulette-question">
@@ -1302,13 +1484,13 @@ export const ExceptionArenaApp: React.FC = () => {
                     className="arena-primary-cta"
                     onClick={() => dispatch({ type: 'OPEN_SUMMARY' })}
                   >
-                    📊 ПОКАЗАТЬ ИТОГ РАУНДА И ОТКРЫТЬ ПРАВИЛО C# →
+                    Открыть инженерный разбор раунда
                   </button>
                 </div>
               )}
 
               {/* ------------------------------------------------------------
-                  ФАЗА 4: ИТОГ РАУНДА + ОТКРЫТОЕ ПРАВИЛО + «А ЧТО ЕСЛИ?»
+                  ФАЗА 4: ИТОГ РАУНДА + ПРАВИЛО C# + ПРОВЕРКА СЦЕНАРИЕВ
                   ------------------------------------------------------------ */}
               {state.subPhase === 'summary' && (
                 <div className="arena-phase-panel">
@@ -1316,7 +1498,7 @@ export const ExceptionArenaApp: React.FC = () => {
                     <div className="arena-verdict-title">
                       {simulation.headline}
                     </div>
-                    <div style={{ fontSize: '13px', lineHeight: 1.4 }}>
+                    <div style={{ fontSize: '13px', lineHeight: 1.45 }}>
                       {simulation.reasonDetailed}
                     </div>
                   </div>
@@ -1326,18 +1508,15 @@ export const ExceptionArenaApp: React.FC = () => {
                     <p>{currentRound.ruleSummary}</p>
                   </div>
 
-                  {/* Интерактив «А что если бы выбрали другой вариант?» прямо в коде! */}
+                  {/* Живое сравнение альтернативных вариантов прямо в редакторе слева */}
                   <div className="arena-voice-section">
                     <div className="arena-voice-group-label">
-                      <span>
-                        🔍 ЖИВОЙ РАЗБОР «А ЧТО ЕСЛИ?»: кликните любой вариант,
-                        чтобы увидеть его в коде слева:
-                      </span>
+                      <span>Проверка других комбинаций в редакторе слева</span>
                     </div>
                     <div
                       style={{
                         display: 'flex',
-                        gap: '6px',
+                        gap: '5px',
                         flexWrap: 'wrap',
                       }}
                     >
@@ -1355,14 +1534,14 @@ export const ExceptionArenaApp: React.FC = () => {
                             })
                           }
                         >
-                          ⚡ {atk.codeLabel}: {atk.payloadCode}
+                          {atk.codeLabel}: {atk.payloadCode}
                         </button>
                       ))}
                     </div>
                     <div
                       style={{
                         display: 'flex',
-                        gap: '6px',
+                        gap: '5px',
                         flexWrap: 'wrap',
                       }}
                     >
@@ -1380,7 +1559,7 @@ export const ExceptionArenaApp: React.FC = () => {
                             })
                           }
                         >
-                          🛡️ {def.codeLabel}: {def.title}
+                          {def.codeLabel}: {def.title}
                         </button>
                       ))}
                     </div>
@@ -1397,8 +1576,8 @@ export const ExceptionArenaApp: React.FC = () => {
                         })
                       }
                     >
-                      ➡️ ПЕРЕЙТИ К РАУНДУ {state.roundNumber + 1} (СМЕНА РОЛЕЙ
-                      КОМАНД)
+                      Перейти к Раунду 0{state.roundNumber + 1} (смена ролей
+                      команд)
                     </button>
                   ) : (
                     <button
@@ -1406,7 +1585,7 @@ export const ExceptionArenaApp: React.FC = () => {
                       className="arena-primary-cta"
                       onClick={() => dispatch({ type: 'GO_TO_FINALE' })}
                     >
-                      🏆 ОТКРЫТЬ ФИНАЛ И «ЭТАЛОННЫЙ ЩИТ ИНЖЕНЕРА C#»
+                      Открыть итоговую сводку и эталонный код C#
                     </button>
                   )}
                 </div>
@@ -1417,19 +1596,19 @@ export const ExceptionArenaApp: React.FC = () => {
       )}
 
       {/* ====================================================================
-          ЭКРАН 5: ФИНАЛ УРОКА И «ЭТАЛОННЫЙ ЩИТ ИНЖЕНЕРА C#»
+          ЭКРАН 5: ФИНАЛЬНАЯ СВОДКА И СПРАВОЧНЫЙ КОД C#
           ==================================================================== */}
       {state.stage === 'finale' && (
         <main className="arena-finale-wrap">
           <section className="arena-podium-card">
             <div>
-              <span className="arena-device-badge">🏆 ИТОГИ ПОЕДИНКА</span>
-              <h2 style={{ margin: '8px 0 4px', fontSize: '24px' }}>
-                Финальный счёт команд
+              <div className="arena-eyebrow">ИТОГОВЫЙ ПРОТОКОЛ ЗАНЯТИЯ</div>
+              <h2 style={{ margin: '4px 0 6px', fontSize: '22px' }}>
+                Результаты команд по 4 раундам
               </h2>
-              <p style={{ margin: 0, fontSize: '14px', color: 'var(--arena-text-muted)' }}>
-                Все 4 раунда C# Exception Arena пройдены: команды испытали себя и
-                в роли атакующих тестировщиков, и в роли архитекторов защиты.
+              <p style={{ margin: 0, fontSize: '13px', color: 'var(--arena-text-muted)' }}>
+                Сумма баллов складывается из точности технических ходов в коде и
+                индивидуальных ответов участников на контрольных блиц-опросах.
               </p>
             </div>
 
@@ -1439,12 +1618,18 @@ export const ExceptionArenaApp: React.FC = () => {
                   state.alphaScore >= state.betaScore ? 'winner' : ''
                 }`}
               >
-                <div style={{ fontSize: '13px', fontWeight: 800 }}>
+                <div
+                  style={{
+                    fontFamily: 'var(--arena-font-mono)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}
+                >
                   КОМАНДА АЛЬФА
                 </div>
                 <div className="arena-podium-big-pts">{state.alphaScore}</div>
                 <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
-                  очков (бои + блиц-рулетка)
+                  итоговых баллов
                 </div>
               </div>
 
@@ -1453,28 +1638,39 @@ export const ExceptionArenaApp: React.FC = () => {
                   state.betaScore >= state.alphaScore ? 'winner' : ''
                 }`}
               >
-                <div style={{ fontSize: '13px', fontWeight: 800 }}>
+                <div
+                  style={{
+                    fontFamily: 'var(--arena-font-mono)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                  }}
+                >
                   КОМАНДА БЕТА
                 </div>
                 <div className="arena-podium-big-pts">{state.betaScore}</div>
                 <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
-                  очков (бои + блиц-рулетка)
+                  итоговых баллов
                 </div>
               </div>
             </div>
 
-            {/* Сводка 4 открытых правил C# */}
             <div className="arena-shield-rules-list">
               {ARENA_ROUNDS.map((r) => (
                 <div key={r.number} className="arena-shield-rule-item">
-                  <div style={{ fontWeight: 800, fontSize: '13px' }}>
-                    ✓ {r.ruleTitle}
+                  <div
+                    style={{
+                      fontFamily: 'var(--arena-font-mono)',
+                      fontWeight: 700,
+                      fontSize: '12px',
+                    }}
+                  >
+                    0{r.number} // {r.ruleTitle}
                   </div>
                   <div
                     style={{
                       fontSize: '12px',
                       color: 'var(--arena-text-muted)',
-                      marginTop: '2px',
+                      marginTop: '3px',
                     }}
                   >
                     {r.ruleSummary}
@@ -1489,7 +1685,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 className="arena-secondary-btn"
                 onClick={() => window.print()}
               >
-                🖨️ Распечатать / Сохранить PDF памятку урока
+                Печать памятки урока (PDF)
               </button>
               <button
                 type="button"
@@ -1497,33 +1693,39 @@ export const ExceptionArenaApp: React.FC = () => {
                 style={{ flex: 1 }}
                 onClick={() => dispatch({ type: 'START_GAME' })}
               >
-                🔄 Сыграть ещё раз с Раунда 1
+                Начать новую серию с Раунда 01
               </button>
             </div>
           </section>
 
-          {/* Правая карточка: Собранный «Эталонный щит инженера C#» */}
           <section className="arena-shield-card">
             <div>
-              <span className="arena-device-badge">
-                🛡️ ПАМЯТКА ИНЖЕНЕРА C# (ИТОГ ЗАНЯТИЯ)
-              </span>
-              <h2 style={{ margin: '8px 0 4px', fontSize: '22px' }}>
-                Эталонный шаблон защищённого метода C#
+              <div className="arena-eyebrow">СПРАВОЧНЫЙ ШАБЛОН C# (.NET 8)</div>
+              <h2 style={{ margin: '4px 0 6px', fontSize: '20px' }}>
+                Архитектура защищённого метода C#
               </h2>
               <p style={{ margin: 0, fontSize: '13px', color: 'var(--arena-text-muted)' }}>
-                Объединяет все 4 правила, открытые классом за урок: прицельный
-                перехват, верная иерархия от частного к общему, освобождение
-                ресурсов в <code>finally</code> и бережное логирование с{' '}
+                Сводный образец кода, объединяющий правила всех четырёх раундов:
+                специфичные фильтры <code>catch</code>, порядок иерархии типов,
+                гарантированный блок <code>finally</code> и проброс через{' '}
                 <code>throw;</code>.
               </p>
             </div>
 
-            <div className="arena-ide-window" style={{ flex: 1 }}>
+            <div
+              className="arena-ide-window"
+              style={{
+                flex: 1,
+                border: '1px solid var(--arena-border)',
+                borderRadius: '3px',
+                background: 'var(--arena-code-bg)',
+              }}
+            >
               <div className="arena-ide-header">
-                <span className="arena-ide-file">
-                  ReferenceShield.cs — Золотой стандарт C# Exception Handling
-                </span>
+                <div className="arena-ide-file">
+                  <span className="arena-ide-tab-indicator" />
+                  <span>ReferenceShield.cs — Образец защищённого метода</span>
+                </div>
               </div>
               <div className="arena-ide-body">
                 {[
@@ -1532,11 +1734,11 @@ export const ExceptionArenaApp: React.FC = () => {
                   '    db.Open();',
                   '    try',
                   '    {',
-                  '        // 1. Прицельно защищаем опасные операции парсинга и деления',
+                  '        // 1. Защищаем потенциально опасные операции парсинга и деления',
                   '        decimal total = decimal.Parse(rawPrice);',
                   '        return total / count;',
                   '    }',
-                  '    catch (FormatException ex) // 2. Сначала узкие типы исключений!',
+                  '    catch (FormatException ex) // 2. Сначала узкие специализированные типы',
                   '    {',
                   '        auditLog.Write("Ошибка формата цены: " + ex.Message);',
                   '        return 0m;',
@@ -1546,18 +1748,19 @@ export const ExceptionArenaApp: React.FC = () => {
                   '        auditLog.Write("Деление на ноль: " + ex.Message);',
                   '        return 0m;',
                   '    }',
-                  '    catch (Exception ex) // 3. Базовый Exception — только в самом конце',
+                  '    catch (Exception ex) // 3. Базовый Exception располагается строго в конце',
                   '    {',
-                  '        auditLog.Write("Критическая ошибка: " + ex.Message);',
-                  '        throw; // 4. Только пустой throw; чтобы сохранить StackTrace!',
+                  '        auditLog.Write("Непредвиденный сбой: " + ex.Message);',
+                  '        throw; // 4. Пустой throw; сохраняет исходный StackTrace',
                   '    }',
-                  '    finally // 5. Выполнится ВСЕГДА (даже после return и throw)',
+                  '    finally // 5. Гарантированно выполняется при return и при исключениях',
                   '    {',
                   '        db.Close();',
                   '    }',
                   '}',
                 ].map((codeLine, idx) => (
                   <div key={idx} className="arena-code-line">
+                    <span className="arena-gutter-marker" />
                     <span className="arena-line-num">{idx + 1}</span>
                     <span className="arena-line-text">
                       <CSharpLineSyntax code={codeLine} />

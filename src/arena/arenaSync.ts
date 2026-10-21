@@ -30,12 +30,12 @@ export interface ArenaGameState {
   unlockedRules: RoundNumber[];
   roundHistory: Partial<Record<RoundNumber, RoundHistoryRecord>>;
 
-  // Текущий раунд: двухшаговый ввод Атаки (Шаг 1: строка -> Шаг 2: снаряд -> Шаг 3: замок 🔒)
+  // Текущий раунд: двухшаговый ввод Атаки (Шаг 1: строка -> Шаг 2: снаряд -> Шаг 3: замок )
   attackTargetLine: number | null;
   selectedAttackId: 'A1' | 'A2' | 'A3' | null;
   attackLocked: boolean;
 
-  // Текущий раунд: двухшаговый ввод Защиты (Шаг 1: строка -> Шаг 2: конструкция -> Шаг 3: замок 🔒)
+  // Текущий раунд: двухшаговый ввод Защиты (Шаг 1: строка -> Шаг 2: конструкция -> Шаг 3: замок )
   defenseTargetLine: number | null;
   selectedDefenseId: 'D1' | 'D2' | 'D3' | 'D4' | null;
   defenseLocked: boolean;
@@ -127,6 +127,7 @@ export type ArenaAction =
   | { type: 'LAUNCH_CLASH' }
   | { type: 'STEP_TRACE'; stepIdx: number }
   | { type: 'OPEN_ROULETTE' }
+  | { type: 'SET_ROULETTE_PLAYER'; playerNum: 1 | 2 | 3 | 4 | 5 | 6 }
   | { type: 'ANSWER_ROULETTE'; optionId: string }
   | { type: 'OPEN_SUMMARY' }
   | { type: 'SET_SANDBOX_VARIANT'; attackId?: 'A1' | 'A2' | 'A3'; defenseId?: 'D1' | 'D2' | 'D3' | 'D4' }
@@ -306,6 +307,12 @@ export function arenaReducer(
       return {
         ...state,
         subPhase: 'roulette',
+      };
+
+    case 'SET_ROULETTE_PLAYER':
+      return {
+        ...state,
+        roulettePlayerNum: action.playerNum,
       };
 
     case 'ANSWER_ROULETTE': {

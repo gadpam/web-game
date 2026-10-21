@@ -1,49 +1,57 @@
 :root {
-  --arena-bg: #0b1020;
-  --arena-surface: #121a30;
-  --arena-surface-2: #18233f;
-  --arena-code-bg: #0d1324;
-  --arena-border: #26355d;
-  --arena-text: #f8fafc;
-  --arena-text-muted: #94a3b8;
+  --arena-bg: #111214;
+  --arena-surface: #17181c;
+  --arena-surface-2: #1f2127;
+  --arena-code-bg: #131417;
+  --arena-border: #2a2d35;
+  --arena-border-strong: #3b3f4a;
+  --arena-text: #ededef;
+  --arena-text-muted: #8a8f98;
 
-  --arena-attack: #f97316;
-  --arena-attack-bg: rgba(249, 115, 22, 0.13);
-  --arena-attack-border: rgba(249, 115, 22, 0.48);
+  --arena-attack: #d96b27;
+  --arena-attack-bg: rgba(217, 107, 39, 0.11);
+  --arena-attack-border: rgba(217, 107, 39, 0.45);
 
-  --arena-defense: #06b6d4;
-  --arena-defense-bg: rgba(6, 182, 212, 0.13);
-  --arena-defense-border: rgba(6, 182, 212, 0.48);
+  --arena-defense: #2563eb;
+  --arena-defense-bg: rgba(37, 99, 235, 0.12);
+  --arena-defense-border: rgba(37, 99, 235, 0.48);
 
-  --arena-success: #10b981;
-  --arena-success-bg: rgba(16, 185, 129, 0.15);
+  --arena-step-ptr: #eab308;
+  --arena-step-bg: rgba(234, 179, 8, 0.12);
 
-  --arena-warning: #f59e0b;
-  --arena-warning-bg: rgba(245, 158, 11, 0.16);
+  --arena-success: #2da44e;
+  --arena-success-bg: rgba(45, 164, 78, 0.12);
 
-  --arena-danger: #ef4444;
-  --arena-danger-bg: rgba(239, 68, 68, 0.16);
+  --arena-warning: #d97706;
+  --arena-warning-bg: rgba(217, 119, 6, 0.13);
 
-  --arena-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --arena-font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  --arena-danger: #e5484d;
+  --arena-danger-bg: rgba(229, 72, 77, 0.13);
+
+  --arena-font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
+  --arena-font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
 }
 
 .arena-root.theme-light {
-  --arena-bg: #f1f5f9;
+  --arena-bg: #f3f2ee;
   --arena-surface: #ffffff;
-  --arena-surface-2: #e2e8f0;
-  --arena-code-bg: #f8fafc;
-  --arena-border: #cbd5e1;
-  --arena-text: #0f172a;
-  --arena-text-muted: #475569;
+  --arena-surface-2: #e8e6df;
+  --arena-code-bg: #faf9f6;
+  --arena-border: #d4d2c9;
+  --arena-border-strong: #b8b5aa;
+  --arena-text: #151618;
+  --arena-text-muted: #5a5e66;
 
-  --arena-attack: #ea580c;
-  --arena-attack-bg: rgba(234, 88, 12, 0.1);
-  --arena-attack-border: rgba(234, 88, 12, 0.45);
+  --arena-attack: #c2510c;
+  --arena-attack-bg: rgba(194, 81, 12, 0.08);
+  --arena-attack-border: rgba(194, 81, 12, 0.42);
 
-  --arena-defense: #0284c7;
-  --arena-defense-bg: rgba(2, 132, 199, 0.1);
-  --arena-defense-border: rgba(2, 132, 199, 0.45);
+  --arena-defense: #1d4ed8;
+  --arena-defense-bg: rgba(29, 78, 216, 0.08);
+  --arena-defense-border: rgba(29, 78, 216, 0.42);
+
+  --arena-step-ptr: #ca8a04;
+  --arena-step-bg: rgba(202, 138, 4, 0.12);
 }
 
 * {
@@ -71,75 +79,141 @@ body {
 }
 
 /* ==========================================================================
-   ПРАВИЛО №1: ЕДИНСТВЕННАЯ ВЕРХНЯЯ ПАНЕЛЬ 56px
+   ИНДИКАТОРНЫЕ СВЕТОДИОДЫ (LED DOTS) И МЕХАНИЧЕСКИЕ КЛАВИШИ (KBD)
+   ========================================================================== */
+@keyframes ledPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+}
+
+.arena-led {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--arena-text-muted);
+  flex-shrink: 0;
+}
+
+.arena-led.ok {
+  background: var(--arena-success);
+  box-shadow: 0 0 6px rgba(45, 164, 78, 0.55);
+}
+
+.arena-led.warn {
+  background: var(--arena-warning);
+  animation: ledPulse 1.4s infinite ease-in-out;
+}
+
+.arena-led.bad {
+  background: var(--arena-danger);
+  box-shadow: 0 0 6px rgba(229, 72, 77, 0.6);
+}
+
+.arena-led.atk {
+  background: var(--arena-attack);
+}
+
+.arena-led.def {
+  background: var(--arena-defense);
+}
+
+.arena-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 3px;
+  background: var(--arena-surface-2);
+  border: 1px solid var(--arena-border-strong);
+  border-bottom-width: 2px;
+  color: var(--arena-text);
+  white-space: nowrap;
+}
+
+/* ==========================================================================
+   ВЕРХНЯЯ ИНЖЕНЕРНАЯ ПАНЕЛЬ 52px (HAIRLINE BAR)
    ========================================================================== */
 .arena-topbar {
-  height: 56px;
-  min-height: 56px;
-  max-height: 56px;
-  padding: 0 18px;
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 0 16px;
   background: var(--arena-surface);
   border-bottom: 1px solid var(--arena-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   z-index: 20;
 }
 
 .arena-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 10px;
-  font-weight: 800;
-  font-size: 16px;
+  font-weight: 700;
+  font-size: 14px;
   letter-spacing: -0.01em;
   white-space: nowrap;
   cursor: pointer;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--arena-text);
-  padding: 6px 10px;
-  border-radius: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
 }
 
 .arena-brand:hover {
   background: var(--arena-surface-2);
+  border-color: var(--arena-border);
 }
 
 .arena-brand-badge {
-  background: linear-gradient(135deg, #f97316, #06b6d4);
-  color: #fff;
+  background: var(--arena-text);
+  color: var(--arena-bg);
   font-family: var(--arena-font-mono);
   font-weight: 800;
-  font-size: 13px;
-  padding: 3px 8px;
-  border-radius: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 3px 6px;
+  border-radius: 2px;
 }
 
-/* Сегментированный переключатель роли устройства (никаких <select>!) */
+/* Сегментированные переключатели в стиле IDE (острые углы 3px) */
 .arena-role-pills,
 .arena-round-pills {
   display: flex;
   align-items: center;
   background: var(--arena-code-bg);
-  padding: 3px;
-  border-radius: 10px;
+  padding: 2px;
+  border-radius: 4px;
   border: 1px solid var(--arena-border);
-  gap: 3px;
+  gap: 2px;
 }
 
 .arena-pill-btn {
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--arena-text-muted);
   font-family: var(--arena-font-sans);
-  font-size: 13px;
-  font-weight: 700;
-  padding: 6px 11px;
-  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 3px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.1s ease, color 0.1s ease;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -152,10 +226,9 @@ body {
 }
 
 .arena-pill-btn.active {
-  background: var(--arena-surface);
+  background: var(--arena-surface-2);
   color: var(--arena-text);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
-  border: 1px solid var(--arena-border);
+  border-color: var(--arena-border-strong);
 }
 
 .arena-pill-btn.done {
@@ -174,27 +247,44 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 12px;
-  border-radius: 9px;
+  padding: 4px 10px;
+  border-radius: 3px;
   background: var(--arena-code-bg);
   border: 1px solid var(--arena-border);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .arena-team-score.is-attacking {
-  border-color: var(--arena-attack-border);
-  background: var(--arena-attack-bg);
+  border-left: 3px solid var(--arena-attack);
 }
 
 .arena-team-score.is-defending {
-  border-color: var(--arena-defense-border);
+  border-left: 3px solid var(--arena-defense);
+}
+
+.arena-role-tag {
+  font-family: var(--arena-font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.arena-role-tag.atk {
+  background: var(--arena-attack-bg);
+  color: var(--arena-attack);
+}
+
+.arena-role-tag.def {
   background: var(--arena-defense-bg);
+  color: var(--arena-defense);
 }
 
 .arena-score-num {
   font-family: var(--arena-font-mono);
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -204,10 +294,10 @@ body {
   gap: 6px;
   font-family: var(--arena-font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 15px;
-  font-weight: 800;
-  padding: 5px 11px;
-  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 3px;
   background: var(--arena-code-bg);
   border: 1px solid var(--arena-border);
   color: var(--arena-text);
@@ -215,31 +305,32 @@ body {
 }
 
 .arena-timer-pill.warning {
-  border-color: var(--arena-warning);
-  color: var(--arena-warning);
+  border-color: var(--arena-danger);
+  color: var(--arena-danger);
 }
 
 .arena-icon-btn {
   background: var(--arena-code-bg);
   border: 1px solid var(--arena-border);
   color: var(--arena-text);
-  height: 34px;
+  height: 30px;
   padding: 0 10px;
-  border-radius: 8px;
+  border-radius: 3px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .arena-icon-btn:hover {
   background: var(--arena-surface-2);
+  border-color: var(--arena-border-strong);
 }
 
 /* ==========================================================================
-   ЭКРАН 0: ПРИВЕТСТВИЕ И ВЫБОР УСТРОЙСТВА (WELCOME)
+   ЭКРАН 0: ИНЖЕНЕРНЫЙ СТАРТ И ВЫБОР РАБОЧЕГО МЕСТА
    ========================================================================== */
 .arena-welcome-wrap {
   flex: 1;
@@ -248,133 +339,146 @@ body {
   justify-content: center;
   align-items: center;
   padding: 24px 32px;
-  gap: 22px;
   overflow-y: auto;
 }
 
 .arena-hero-card {
-  max-width: 1120px;
+  max-width: 1140px;
   width: 100%;
   background: var(--arena-surface);
   border: 1px solid var(--arena-border);
-  border-radius: 18px;
+  border-radius: 4px;
   padding: 28px 32px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3);
+  gap: 24px;
 }
 
 .arena-hero-top {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 20px;
+  align-items: flex-end;
+  gap: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--arena-border);
   flex-wrap: wrap;
+}
+
+.arena-eyebrow {
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--arena-text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
 }
 
 .arena-hero-title {
   margin: 0;
-  font-size: clamp(26px, 2.6vw, 36px);
-  font-weight: 900;
+  font-size: clamp(24px, 2.4vw, 32px);
+  font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
 }
 
 .arena-hero-sub {
   margin: 8px 0 0;
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.55;
   color: var(--arena-text-muted);
-  max-width: 72ch;
+  max-width: 68ch;
 }
 
-/* 3 крупные карточки выбора роли устройства */
+/* 3 строгих терминала выбора роли устройства (1px Hairline Grid) */
 .arena-device-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  border: 1px solid var(--arena-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--arena-border);
+  gap: 1px;
 }
 
 .arena-device-card {
   background: var(--arena-code-bg);
-  border: 2px solid var(--arena-border);
-  border-radius: 14px;
-  padding: 20px;
+  border: none;
+  padding: 20px 22px;
   text-align: left;
   cursor: pointer;
   color: var(--arena-text);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  gap: 14px;
+  transition: background 0.12s ease;
 }
 
 .arena-device-card:hover {
-  transform: translateY(-2px);
+  background: var(--arena-surface-2);
 }
 
 .arena-device-card.projector {
-  border-color: #6366f1;
-  background: rgba(99, 102, 241, 0.1);
+  border-top: 3px solid var(--arena-text);
 }
 
 .arena-device-card.alpha {
-  border-color: var(--arena-attack-border);
-  background: var(--arena-attack-bg);
+  border-top: 3px solid var(--arena-attack);
 }
 
 .arena-device-card.beta {
-  border-color: var(--arena-defense-border);
-  background: var(--arena-defense-bg);
+  border-top: 3px solid var(--arena-defense);
 }
 
 .arena-device-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--arena-surface);
-  width: fit-content;
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--arena-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .arena-device-card h3 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 800;
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 .arena-device-card p {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.45;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--arena-text-muted);
 }
 
 .arena-device-cta {
-  font-weight: 800;
-  font-size: 14px;
+  font-family: var(--arena-font-mono);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--arena-text);
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-/* Дорожная карта 4 раундов на старте */
+/* Спецификация 4 раундов в таблично-инженерном виде */
 .arena-rounds-preview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  border: 1px solid var(--arena-border);
+  border-radius: 4px;
+  background: var(--arena-border);
+  gap: 1px;
 }
 
 .arena-round-mini {
   background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  border-radius: 12px;
-  padding: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -384,105 +488,105 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  font-weight: 800;
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
   color: var(--arena-text-muted);
 }
 
 .arena-round-mini-pts {
-  font-family: var(--arena-font-mono);
-  color: var(--arena-warning);
+  color: var(--arena-text);
 }
 
 .arena-round-mini h4 {
   margin: 0;
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .arena-round-mini code {
   font-family: var(--arena-font-mono);
-  font-size: 12px;
-  color: var(--arena-defense);
+  font-size: 11px;
+  color: var(--arena-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ==========================================================================
-   ОСНОВНАЯ РАБОЧАЯ СЕТКА РАУНДА НА ПРОЕКТОРЕ (БЕЗ СКРОЛЛА!)
+   ОСНОВНАЯ РАБОЧАЯ СЕТКА РАУНДА (SPLIT-PANE IDE LAYOUT)
    ========================================================================== */
 .arena-stage-main {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px 18px;
-  gap: 10px;
 }
 
-/* Верхняя полоса контекста раунда и прогресс-бар таймера */
+/* Верхняя полоса контекста раунда */
 .arena-round-banner {
   background: var(--arena-surface);
-  border: 1px solid var(--arena-border);
-  border-radius: 12px;
-  padding: 10px 16px;
+  border-bottom: 1px solid var(--arena-border);
+  padding: 10px 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   position: relative;
-  overflow: hidden;
 }
 
 .arena-timer-bar {
   position: absolute;
   bottom: 0;
   left: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--arena-defense), var(--arena-attack));
+  height: 2px;
+  background: var(--arena-defense);
   transition: width 0.4s linear;
 }
 
 .arena-round-title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
 .arena-round-num-tag {
-  background: var(--arena-surface-2);
-  border: 1px solid var(--arena-border);
-  padding: 5px 10px;
-  border-radius: 8px;
+  background: var(--arena-code-bg);
+  border: 1px solid var(--arena-border-strong);
+  padding: 4px 9px;
+  border-radius: 3px;
   font-family: var(--arena-font-mono);
-  font-weight: 800;
-  font-size: 13px;
+  font-weight: 700;
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .arena-round-heading h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .arena-round-heading p {
   margin: 2px 0 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--arena-text-muted);
 }
 
-/* Шаги состояния экрана раунда (Planning -> Tracing -> Roulette -> Summary) */
+/* Шаги состояния экрана раунда */
 .arena-subphase-steps {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .arena-step-chip {
-  padding: 6px 11px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 3px;
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 600;
   background: var(--arena-code-bg);
   border: 1px solid var(--arena-border);
   color: var(--arena-text-muted);
@@ -492,104 +596,127 @@ body {
 .arena-step-chip.active {
   background: var(--arena-surface-2);
   color: var(--arena-text);
-  border-color: var(--arena-defense);
+  border-color: var(--arena-text);
 }
 
-/* Двухколоночная арена раунда: слева большое окно C#-кода + 3 датчика, справа панель активной фазы */
+/* Двухколоночная сплит-сетка как в JetBrains Rider */
 .arena-work-grid {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 1.28fr 1fr;
-  gap: 14px;
+  grid-template-columns: 1.32fr 1fr;
+  background: var(--arena-border);
+  gap: 1px;
 }
 
 /* ==========================================================================
-   ЛЕВАЯ КОЛОНКА: ОКНО C# IDE + 3 ФИЗИЧЕСКИХ ДАТЧИКА СИСТЕМЫ
+   ЛЕВАЯ ПАНЕЛЬ: C# РЕДАКТОР С ОТЛАДОЧНЫМ GUTTER + ПАНЕЛЬ ТЕЛЕМЕТРИИ CLR
    ========================================================================== */
 .arena-ide-column {
   min-height: 0;
+  background: var(--arena-code-bg);
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .arena-ide-window {
   flex: 1;
   min-height: 0;
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  border-radius: 14px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
 .arena-ide-header {
-  height: 38px;
+  height: 36px;
   padding: 0 14px;
   background: var(--arena-surface);
   border-bottom: 1px solid var(--arena-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  font-family: var(--arena-font-mono);
   font-size: 12px;
-  font-weight: 700;
 }
 
 .arena-ide-file {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--arena-font-mono);
+  font-weight: 700;
 }
 
-.arena-ide-dots {
-  display: flex;
-  gap: 6px;
-}
-
-.arena-ide-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.arena-ide-tab-indicator {
+  width: 8px;
+  height: 8px;
+  background: var(--arena-defense);
+  border-radius: 1px;
 }
 
 .arena-ide-body {
   flex: 1;
-  padding: 10px 12px;
+  padding: 12px 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
   font-family: var(--arena-font-mono);
-  font-size: clamp(14px, 1.28vw, 18px);
-  line-height: 1.48;
+  font-size: clamp(14px, 1.25vw, 18px);
+  line-height: 1.55;
 }
 
 .arena-code-line {
   display: grid;
-  grid-template-columns: 34px 1fr auto;
+  grid-template-columns: 26px 32px 1fr auto;
   align-items: center;
-  gap: 10px;
-  padding: 3px 10px;
-  border-radius: 7px;
-  border: 1px solid transparent;
+  gap: 8px;
+  padding: 2px 14px 2px 8px;
+  border-left: 3px solid transparent;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.08s ease;
   user-select: none;
 }
 
 .arena-code-line:hover {
-  background: rgba(148, 163, 184, 0.08);
+  background: rgba(148, 163, 184, 0.06);
+}
+
+/* Колонка маркера отладчика (Instruction Pointer / Breakpoint) */
+.arena-gutter-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+}
+
+.arena-bp-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.arena-bp-dot.atk {
+  background: var(--arena-attack);
+}
+
+.arena-bp-dot.def {
+  background: var(--arena-defense);
+}
+
+/* Жёлтая стрелка указателя инструкции Visual Studio */
+.arena-ip-arrow {
+  width: 14px;
+  height: 14px;
+  fill: var(--arena-step-ptr);
+  filter: drop-shadow(0 0 3px rgba(234, 179, 8, 0.45));
 }
 
 .arena-line-num {
   color: var(--arena-text-muted);
   font-size: 12px;
   text-align: right;
-  opacity: 0.7;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
 }
 
 .arena-line-text {
@@ -599,51 +726,51 @@ body {
 
 /* Живой diff (+ try / catch / finally) */
 .arena-code-line.diff-added {
-  background: rgba(6, 182, 212, 0.11);
-  border-left: 3px solid var(--arena-defense);
+  background: rgba(37, 99, 235, 0.08);
+  border-left-color: var(--arena-defense);
 }
 
 /* Активная строка трассировки */
 .arena-code-line.trace-ok {
-  background: rgba(16, 185, 129, 0.16);
-  border-color: var(--arena-success);
+  background: var(--arena-step-bg);
+  border-left-color: var(--arena-step-ptr);
 }
 
 .arena-code-line.trace-throw {
-  background: rgba(239, 68, 68, 0.22);
-  border-color: var(--arena-danger);
+  background: var(--arena-danger-bg);
+  border-left-color: var(--arena-danger);
 }
 
 .arena-code-line.trace-catch {
-  background: rgba(6, 182, 212, 0.22);
-  border-color: var(--arena-defense);
+  background: var(--arena-defense-bg);
+  border-left-color: var(--arena-defense);
 }
 
 .arena-code-line.trace-finally {
-  background: rgba(245, 158, 11, 0.2);
-  border-color: var(--arena-warning);
+  background: var(--arena-success-bg);
+  border-left-color: var(--arena-success);
 }
 
 .arena-code-line.trace-compile_error {
-  background: rgba(239, 68, 68, 0.24);
-  border-color: var(--arena-danger);
+  background: var(--arena-danger-bg);
+  border-left-color: var(--arena-danger);
   text-decoration: wavy underline var(--arena-danger);
 }
 
 /* Пропущенная строка после выброса исключения */
 .arena-code-line.line-skipped .arena-line-text {
   text-decoration: line-through;
-  opacity: 0.45;
+  opacity: 0.4;
 }
 
 /* Прицел выбора строки (Шаг 1) */
 .arena-code-line.target-attack {
-  border-color: var(--arena-attack);
+  border-left-color: var(--arena-attack);
   background: var(--arena-attack-bg);
 }
 
 .arena-code-line.target-defense {
-  border-color: var(--arena-defense);
+  border-left-color: var(--arena-defense);
   background: var(--arena-defense-bg);
 }
 
@@ -654,88 +781,109 @@ body {
 }
 
 .arena-inline-badge {
+  font-family: var(--arena-font-mono);
   font-size: 11px;
-  font-weight: 800;
-  padding: 2px 7px;
-  border-radius: 5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 2px;
   white-space: nowrap;
 }
 
 .arena-inline-badge.var-badge {
-  background: rgba(245, 158, 11, 0.18);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: var(--arena-surface-2);
+  color: var(--arena-step-ptr);
+  border: 1px solid var(--arena-border-strong);
 }
 
 .arena-inline-badge.skip-badge {
-  background: rgba(239, 68, 68, 0.16);
-  color: #f87171;
+  background: var(--arena-danger-bg);
+  color: var(--arena-danger);
+  border: 1px solid rgba(229, 72, 77, 0.35);
 }
 
 .arena-inline-badge.target-badge-atk {
-  background: var(--arena-attack);
-  color: #fff;
+  background: var(--arena-attack-bg);
+  color: var(--arena-attack);
+  border: 1px solid var(--arena-attack-border);
 }
 
 .arena-inline-badge.target-badge-def {
-  background: var(--arena-defense);
-  color: #fff;
+  background: var(--arena-defense-bg);
+  color: var(--arena-defense);
+  border: 1px solid var(--arena-defense-border);
 }
 
-/* Цвета C# синтаксиса */
+/* Цвета C# синтаксиса (стиль JetBrains Rider Dark / Light) */
 .cs-tok-kw {
-  color: #c084fc;
-  font-weight: 700;
+  color: #cf8e6d;
+  font-weight: 600;
 }
 .theme-light .cs-tok-kw {
-  color: #7e22ce;
+  color: #0033b3;
 }
 
 .cs-tok-exc {
-  color: #38bdf8;
-  font-weight: 700;
+  color: #56a8f5;
+  font-weight: 600;
 }
 .theme-light .cs-tok-exc {
-  color: #0369a1;
+  color: #00627a;
 }
 
 .cs-tok-type {
-  color: #2dd4bf;
+  color: #6fafbd;
 }
 .theme-light .cs-tok-type {
-  color: #0f766e;
+  color: #267f99;
 }
 
 .cs-tok-string {
-  color: #fb923c;
+  color: #6aab73;
 }
 .theme-light .cs-tok-string {
-  color: #c2410c;
+  color: #067d17;
 }
 
 .cs-tok-num {
-  color: #facc15;
+  color: #2aacb8;
 }
 .theme-light .cs-tok-num {
-  color: #b45309;
+  color: #1750eb;
 }
 
 .cs-tok-comment {
-  color: #64748b;
+  color: #7a7e85;
   font-style: italic;
 }
 
-/* 3 ФИЗИЧЕСКИХ ДАТЧИКА СИСТЕМЫ ПОД КОДОМ (Правило №11) */
+/* НИЖНЯЯ ПРИБОРНАЯ ПАНЕЛЬ ТЕЛЕМЕТРИИ CLR (3 ДАТЧИКА + СТРОКА ВЫВОДА) */
+.arena-telemetry-dock {
+  background: var(--arena-surface);
+  border-top: 1px solid var(--arena-border);
+  display: flex;
+  flex-direction: column;
+}
+
+.arena-telemetry-header {
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--arena-border);
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  color: var(--arena-text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .arena-sensors-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
+  background: var(--arena-border);
+  gap: 1px;
 }
 
 .arena-sensor-card {
   background: var(--arena-surface);
-  border: 1px solid var(--arena-border);
-  border-radius: 10px;
   padding: 9px 12px;
   display: flex;
   flex-direction: column;
@@ -743,8 +891,10 @@ body {
 }
 
 .arena-sensor-label {
-  font-size: 11px;
+  font-family: var(--arena-font-mono);
+  font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0.04em;
   color: var(--arena-text-muted);
   display: flex;
   justify-content: space-between;
@@ -753,90 +903,90 @@ body {
 
 .arena-sensor-value {
   font-family: var(--arena-font-mono);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
 }
 
 .arena-sensor-card.status-good {
-  border-color: rgba(16, 185, 129, 0.5);
   background: var(--arena-success-bg);
 }
 
 .arena-sensor-card.status-bad {
-  border-color: rgba(239, 68, 68, 0.55);
   background: var(--arena-danger-bg);
 }
 
 .arena-sensor-card.status-warn {
-  border-color: rgba(245, 158, 11, 0.55);
   background: var(--arena-warning-bg);
 }
 
 /* ==========================================================================
-   ПРАВАЯ КОЛОНКА: ПАНЕЛЬ АКТИВНОЙ ФАЗЫ РАУНДА (БЕЗ НАСЛОЕНИЯ!)
+   ПРАВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ ФАЗОЙ РАУНДА (БЕЗ ПУЗЫРЕЙ И ГРАДИЕНТОВ)
    ========================================================================== */
 .arena-phase-column {
   min-height: 0;
+  background: var(--arena-surface);
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .arena-phase-panel {
   flex: 1;
   min-height: 0;
-  background: var(--arena-surface);
-  border: 1px solid var(--arena-border);
-  border-radius: 14px;
   padding: 14px 16px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   overflow-y: auto;
 }
 
-/* Статус конвертов команд в фазе планирования */
+/* Статус готовности команд в фазе планирования */
 .arena-envelopes-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  border: 1px solid var(--arena-border);
+  border-radius: 3px;
+  background: var(--arena-border);
+  gap: 1px;
 }
 
 .arena-envelope-box {
-  border-radius: 11px;
   padding: 10px 12px;
-  border: 1px solid var(--arena-border);
   background: var(--arena-code-bg);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .arena-envelope-box.atk {
-  border-color: var(--arena-attack-border);
+  border-top: 2px solid var(--arena-attack);
 }
 
 .arena-envelope-box.def {
-  border-color: var(--arena-defense-border);
+  border-top: 2px solid var(--arena-defense);
 }
 
 .arena-envelope-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  font-weight: 800;
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .arena-lock-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--arena-font-mono);
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  font-weight: 700;
 }
 
 .arena-lock-badge.locked {
@@ -849,33 +999,37 @@ body {
   color: var(--arena-warning);
 }
 
-/* Быстрые кнопки голосовых кодов А-1..А-3 и З-1..З-4 */
+/* Списки вариантов Атаки (А-1..А-3) и Защиты (З-1..З-4) */
 .arena-voice-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.arena-voice-group-label {
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--arena-text-muted);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.arena-cards-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
+.arena-voice-group-label {
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--arena-text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.arena-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
 .arena-option-card {
   background: var(--arena-code-bg);
-  border: 1.5px solid var(--arena-border);
-  border-radius: 10px;
-  padding: 8px 11px;
+  border: 1px solid var(--arena-border);
+  border-left: 3px solid transparent;
+  border-radius: 3px;
+  padding: 8px 10px;
   text-align: left;
   color: var(--arena-text);
   cursor: pointer;
@@ -883,20 +1037,23 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  transition: all 0.12s ease;
+  transition: background 0.1s ease, border-color 0.1s ease;
 }
 
 .arena-option-card:hover {
   background: var(--arena-surface-2);
+  border-color: var(--arena-border-strong);
 }
 
 .arena-option-card.selected-atk {
-  border-color: var(--arena-attack);
+  border-color: var(--arena-attack-border);
+  border-left-color: var(--arena-attack);
   background: var(--arena-attack-bg);
 }
 
 .arena-option-card.selected-def {
-  border-color: var(--arena-defense);
+  border-color: var(--arena-defense-border);
+  border-left-color: var(--arena-defense);
   background: var(--arena-defense-bg);
 }
 
@@ -909,23 +1066,25 @@ body {
 
 .arena-voice-code {
   font-family: var(--arena-font-mono);
-  font-size: 13px;
-  font-weight: 900;
-  padding: 4px 8px;
-  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 2px;
   white-space: nowrap;
+  border: 1px solid var(--arena-border-strong);
+  border-bottom-width: 2px;
 }
 
 .arena-voice-code.atk {
   background: var(--arena-attack-bg);
   color: var(--arena-attack);
-  border: 1px solid var(--arena-attack-border);
+  border-color: var(--arena-attack-border);
 }
 
 .arena-voice-code.def {
   background: var(--arena-defense-bg);
   color: var(--arena-defense);
-  border: 1px solid var(--arena-defense-border);
+  border-color: var(--arena-defense-border);
 }
 
 .arena-option-text {
@@ -937,67 +1096,74 @@ body {
 
 .arena-option-title {
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .arena-option-code {
   font-family: var(--arena-font-mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--arena-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Главная кнопка действия (Правило №24: одна главная кнопка на экране!) */
+/* Главная кнопка действия (строгая тактильная кнопка без градиентов) */
 .arena-primary-cta {
   width: 100%;
-  border: none;
-  border-radius: 11px;
-  padding: 12px 18px;
+  border: 1px solid var(--arena-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  padding: 11px 16px;
   font-family: var(--arena-font-sans);
-  font-size: 15px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
   color: #ffffff;
-  background: linear-gradient(135deg, #f97316, #06b6d4);
+  background: var(--arena-defense);
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: 0 6px 20px rgba(6, 182, 212, 0.28);
-  transition: transform 0.12s ease, opacity 0.12s ease;
+  transition: filter 0.1s ease, transform 0.06s ease;
 }
 
 .arena-primary-cta:hover {
-  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.arena-primary-cta:active {
+  transform: translateY(1px);
 }
 
 /* ==========================================================================
-   ФАЗА 2: ПОШАГОВАЯ ТРАССИРОВКА CLR (TRACING)
+   ФАЗА 2: ПОШАГОВЫЙ ОТЛАДЧИК CLR (TRACING)
    ========================================================================== */
 .arena-trace-explanation {
   background: var(--arena-code-bg);
-  border: 1.5px solid var(--arena-border);
-  border-radius: 12px;
-  padding: 14px;
+  border: 1px solid var(--arena-border-strong);
+  border-left: 3px solid var(--arena-step-ptr);
+  border-radius: 3px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .arena-trace-step-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  font-weight: 800;
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
   color: var(--arena-text-muted);
 }
 
 .arena-trace-comment {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1.45;
 }
 
@@ -1009,13 +1175,18 @@ body {
 .arena-secondary-btn {
   flex: 1;
   background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
+  border: 1px solid var(--arena-border-strong);
+  border-bottom-width: 2px;
   color: var(--arena-text);
-  padding: 10px 12px;
-  border-radius: 9px;
-  font-weight: 700;
-  font-size: 13px;
+  padding: 9px 12px;
+  border-radius: 3px;
+  font-weight: 600;
+  font-size: 12px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .arena-secondary-btn:hover:not(:disabled) {
@@ -1023,21 +1194,21 @@ body {
 }
 
 .arena-secondary-btn:disabled {
-  opacity: 0.45;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 /* ==========================================================================
-   ФАЗА 3: СЛЕПАЯ РУЛЕТКА БЛИЦ-ВОПРОСА (ПРОТИВ «ОДНОГО ОТЛИЧНИКА»)
+   ФАЗА 3: МЕХАНИЧЕСКИЙ СЕЛЕКТОР ОТВЕЧАЮЩЕГО (ПРОТИВ «ОДНОГО ОТЛИЧНИКА»)
    ========================================================================== */
 .arena-roulette-box {
   background: var(--arena-code-bg);
-  border: 2px solid var(--arena-warning);
-  border-radius: 12px;
+  border: 1px solid var(--arena-border-strong);
+  border-radius: 3px;
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .arena-roulette-header {
@@ -1047,40 +1218,63 @@ body {
   gap: 8px;
 }
 
-.arena-player-call-badge {
-  background: var(--arena-warning);
-  color: #0f172a;
-  font-weight: 900;
-  font-size: 13px;
-  padding: 4px 10px;
-  border-radius: 999px;
+/* Живой 6-секционный барабан выбора номера участника (01..06) */
+.arena-drum-strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  background: var(--arena-surface);
+  padding: 4px;
+  border: 1px solid var(--arena-border);
+  border-radius: 3px;
+}
+
+.arena-drum-slot {
+  padding: 6px 4px;
+  text-align: center;
+  font-family: var(--arena-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--arena-text-muted);
+  background: var(--arena-code-bg);
+  border: 1px solid var(--arena-border);
+  border-radius: 2px;
+  transition: all 0.08s ease;
+}
+
+.arena-drum-slot.active-slot {
+  background: var(--arena-step-ptr);
+  color: #111214;
+  border-color: var(--arena-step-ptr);
+  font-weight: 800;
 }
 
 .arena-roulette-question {
   margin: 0;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.4;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .arena-roulette-options {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
 }
 
 .arena-roulette-opt-btn {
   background: var(--arena-surface);
-  border: 1.5px solid var(--arena-border);
-  border-radius: 9px;
-  padding: 10px 12px;
+  border: 1px solid var(--arena-border);
+  border-left: 3px solid transparent;
+  border-radius: 3px;
+  padding: 9px 11px;
   color: var(--arena-text);
   text-align: left;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
 }
 
@@ -1090,20 +1284,22 @@ body {
 
 .arena-roulette-opt-btn.correct {
   border-color: var(--arena-success);
+  border-left-color: var(--arena-success);
   background: var(--arena-success-bg);
 }
 
 .arena-roulette-opt-btn.wrong {
   border-color: var(--arena-danger);
+  border-left-color: var(--arena-danger);
   background: var(--arena-danger-bg);
 }
 
 /* ==========================================================================
-   ФАЗА 4: ВЕРДИКТ РАУНДА + ПРАВИЛО C# + ЖИВОЙ РАЗБОР «А ЧТО ЕСЛИ?»
+   ФАЗА 4: ВЕРДИКТ РАУНДА + ПРАВИЛО C# + ПЕРЕКЛЮЧАТЕЛЬ СЦЕНАРИЕВ
    ========================================================================== */
 .arena-verdict-banner {
-  border-radius: 11px;
-  padding: 12px 14px;
+  border-radius: 3px;
+  padding: 11px 14px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1111,28 +1307,33 @@ body {
 
 .arena-verdict-banner.REPELLED {
   background: var(--arena-success-bg);
-  border: 1.5px solid var(--arena-success);
+  border: 1px solid var(--arena-success);
+  border-left-width: 4px;
 }
 
 .arena-verdict-banner.PARTIAL {
   background: var(--arena-warning-bg);
-  border: 1.5px solid var(--arena-warning);
+  border: 1px solid var(--arena-warning);
+  border-left-width: 4px;
 }
 
 .arena-verdict-banner.BREACHED {
   background: var(--arena-danger-bg);
-  border: 1.5px solid var(--arena-danger);
+  border: 1px solid var(--arena-danger);
+  border-left-width: 4px;
 }
 
 .arena-verdict-title {
-  font-size: 16px;
-  font-weight: 900;
+  font-family: var(--arena-font-mono);
+  font-size: 14px;
+  font-weight: 800;
 }
 
 .arena-rule-card {
   background: var(--arena-code-bg);
-  border-left: 4px solid var(--arena-defense);
-  border-radius: 9px;
+  border: 1px solid var(--arena-border);
+  border-left: 3px solid var(--arena-defense);
+  border-radius: 3px;
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1141,72 +1342,71 @@ body {
 
 .arena-rule-card h4 {
   margin: 0;
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--arena-defense);
+  font-family: var(--arena-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--arena-text);
 }
 
 .arena-rule-card p {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--arena-text-muted);
 }
 
 /* ==========================================================================
    РЕЖИМ КОМАНДНОГО НОУТБУКА (3-ШАГОВЫЙ ПУЛЬТ ИГРОКОВ 1–6)
    ========================================================================== */
-.arena-laptop-layout {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 14px;
-  padding: 12px 18px;
-}
-
 .arena-role-chain-steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  border: 1px solid var(--arena-border);
+  border-radius: 3px;
+  background: var(--arena-border);
+  gap: 1px;
 }
 
 .arena-chain-box {
   background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  border-radius: 9px;
   padding: 8px 10px;
   font-size: 12px;
 }
 
+.arena-chain-box strong {
+  display: block;
+  font-family: var(--arena-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--arena-text-muted);
+  margin-bottom: 2px;
+}
+
 .arena-chain-box.active {
-  border-color: var(--arena-defense);
-  background: var(--arena-defense-bg);
+  border-top: 2px solid var(--arena-defense);
 }
 
 .arena-chain-box.done {
-  border-color: var(--arena-success);
-  background: var(--arena-success-bg);
+  border-top: 2px solid var(--arena-success);
 }
 
 /* ==========================================================================
-   ЭКРАН 5: ФИНАЛ И «ЭТАЛОННЫЙ ЩИТ ИНЖЕНЕРА C#»
+   ЭКРАН 5: ФИНАЛ И СПРАВОЧНИК ЗАЩИТНОГО КОДА C#
    ========================================================================== */
 .arena-finale-wrap {
   flex: 1;
   min-height: 0;
-  padding: 16px 24px;
   display: grid;
   grid-template-columns: 1fr 1.25fr;
-  gap: 18px;
+  background: var(--arena-border);
+  gap: 1px;
   overflow-y: auto;
 }
 
 .arena-podium-card,
 .arena-shield-card {
   background: var(--arena-surface);
-  border: 1px solid var(--arena-border);
-  border-radius: 16px;
-  padding: 20px 24px;
+  padding: 22px 26px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -1216,41 +1416,40 @@ body {
 .arena-podium-scores {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  border: 1px solid var(--arena-border);
+  background: var(--arena-border);
+  gap: 1px;
 }
 
 .arena-podium-team {
   background: var(--arena-code-bg);
-  border: 2px solid var(--arena-border);
-  border-radius: 12px;
   padding: 16px;
   text-align: center;
 }
 
 .arena-podium-team.winner {
-  border-color: var(--arena-success);
-  background: var(--arena-success-bg);
+  border-top: 3px solid var(--arena-success);
 }
 
 .arena-podium-big-pts {
   font-family: var(--arena-font-mono);
-  font-size: 36px;
-  font-weight: 900;
+  font-size: 34px;
+  font-weight: 800;
   margin: 6px 0;
 }
 
 .arena-shield-rules-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .arena-shield-rule-item {
   background: var(--arena-code-bg);
   border: 1px solid var(--arena-border);
-  border-left: 4px solid var(--arena-success);
-  border-radius: 10px;
-  padding: 10px 14px;
+  border-left: 3px solid var(--arena-success);
+  border-radius: 3px;
+  padding: 9px 12px;
 }
 
 @media (max-width: 1024px) {
@@ -1260,7 +1459,6 @@ body {
     overflow-y: auto;
   }
   .arena-work-grid,
-  .arena-laptop-layout,
   .arena-finale-wrap,
   .arena-device-grid,
   .arena-rounds-preview {
