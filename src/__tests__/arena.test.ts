@@ -9,6 +9,11 @@ import {
   createInitialArenaState,
   getTeamsForRound,
 } from '../arena/arenaSync';
+import {
+  buildLocalsTable,
+  createDefaultCustomArgs,
+  simulateCustomArgsClash,
+} from '../arena/liveEvaluator';
 
 describe('C# Exception Arena: Атака vs Защита — Симулятор CLR и Правила 4 Раундов', () => {
   it('содержит ровно 4 раунда с растущими ставками 100 / 150 / 200 / 300 очков', () => {
@@ -101,5 +106,27 @@ describe('C# Exception Arena: Атака vs Защита — Симулятор 
       optionId: correctOpt,
     });
     expect(state.betaScore).toBe(100);
+  });
+
+  it('живой вычислитель свободного ввода аргументов C# корректно отрабатывает любые числа/строки и формирует таблицу Locals', () => {
+    const r1 = ARENA_ROUNDS[0];
+    const customArgs = {
+      ...createDefaultCustomArgs(),
+      r1CountText: '5',
+      r1Total: '1500',
+    };
+    const simSafe = simulateCustomArgsClash(r1, customArgs, 'D1');
+    expect(simSafe.outcome).toBe('REPELLED');
+    expect(simSafe.headline).toContain('300');
+
+    const locals = buildLocalsTable(
+      r1,
+      customArgs,
+      simSafe.steps[simSafe.steps.length - 1],
+      simSafe
+    );
+    expect(locals.some((v) => v.name === '$return' && v.value === '300')).toBe(
+      true
+    );
   });
 });

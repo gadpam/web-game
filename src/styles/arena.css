@@ -856,6 +856,127 @@ body {
   font-style: italic;
 }
 
+/* ЖИВАЯ СТРОКА ВЫЗОВА МЕТОДА СО СВОБОДНЫМ ВВОДОМ АРГУМЕНТОВ C# */
+.arena-call-bar {
+  background: var(--arena-surface);
+  border-top: 1px solid var(--arena-border);
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--arena-font-mono);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.arena-call-expr {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.arena-arg-input {
+  background: var(--arena-code-bg);
+  border: 1px solid var(--arena-border-strong);
+  color: var(--arena-step-ptr);
+  font-family: var(--arena-font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 2px;
+  width: 96px;
+  outline: none;
+}
+
+.arena-arg-input:focus {
+  border-color: var(--arena-defense);
+  background: var(--arena-surface-2);
+}
+
+.arena-arg-toggle {
+  background: var(--arena-code-bg);
+  border: 1px solid var(--arena-border-strong);
+  color: var(--arena-text);
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.arena-arg-toggle.is-null {
+  color: var(--arena-danger);
+  border-color: var(--arena-danger);
+}
+
+/* ТАБЛИЦА ЛОКАЛЬНЫХ ПЕРЕМЕННЫХ ОТЛАДЧИКА (LOCALS / WATCH) */
+.arena-locals-pane {
+  background: var(--arena-code-bg);
+  border-top: 1px solid var(--arena-border);
+  font-family: var(--arena-font-mono);
+  font-size: 11px;
+}
+
+.arena-locals-header {
+  background: var(--arena-surface);
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--arena-border);
+  display: grid;
+  grid-template-columns: 140px 1fr 130px;
+  gap: 10px;
+  color: var(--arena-text-muted);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.arena-locals-row {
+  padding: 4px 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  display: grid;
+  grid-template-columns: 140px 1fr 130px;
+  gap: 10px;
+  align-items: center;
+}
+
+.arena-locals-row.is-changed {
+  background: var(--arena-step-bg);
+}
+
+.arena-locals-row.is-fault {
+  background: var(--arena-danger-bg);
+  color: var(--arena-danger);
+}
+
+.arena-locals-name {
+  font-weight: 700;
+  color: var(--arena-text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.arena-locals-val {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--arena-step-ptr);
+}
+
+.arena-locals-row.is-fault .arena-locals-val {
+  color: var(--arena-danger);
+  font-weight: 700;
+}
+
+.arena-locals-type {
+  color: var(--arena-text-muted);
+  text-align: right;
+}
+
 /* НИЖНЯЯ ПРИБОРНАЯ ПАНЕЛЬ ТЕЛЕМЕТРИИ CLR (3 ДАТЧИКА + СТРОКА ВЫВОДА) */
 .arena-telemetry-dock {
   background: var(--arena-surface);

@@ -15,6 +15,14 @@ import {
   saveArenaState,
 } from './arenaSync';
 import { CSharpLineSyntax } from './CSharpCodeHighlighter';
+import {
+  buildLocalsTable,
+  createDefaultCustomArgs,
+  CustomRoundArgs,
+  getCustomArgsForAttackPreset,
+  simulateCustomArgsClash,
+} from './liveEvaluator';
+import { soundEngine } from './soundEngine';
 import '../styles/arena.css';
 
 // Векторный указатель текущей строки отладчика (Instruction Pointer в стиле Visual Studio / Rider)
@@ -35,6 +43,10 @@ export const ExceptionArenaApp: React.FC = () => {
   const [drumDisplaySlot, setDrumDisplaySlot] = useState<number>(
     state.roulettePlayerNum
   );
+  const [customArgs, setCustomArgs] = useState<CustomRoundArgs>(() =>
+    createDefaultCustomArgs()
+  );
+  const [useCustomEval, setUseCustomEval] = useState<boolean>(false);
 
   const syncRef = useRef<ReturnType<typeof createArenaSyncChannel> | null>(null);
   const stateRef = useRef(state);
@@ -83,85 +95,6 @@ export const ExceptionArenaApp: React.FC = () => {
     return () => window.clearInterval(id);
   }, [state.timerRunning, state.stage, state.subPhase]);
 
-  // Живое вращение механического селектора участников (01..06) при входе в фазу блиц-опроса
-  const triggerDrumSpin = (targetPlayer?: 1 | 2 | 3 | 4 | 5 | 6) => {
-    const finalSlot =
-      targetPlayer ??
-      (((Math.floor(Math.random() * 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6));
-    setDrumSpinning(true);
-
-    const delays = [55, 65, 75, 90, 110, 135, 165, 200, 245];
-    let step = 0;
-    let current = drumDisplaySlot;
-
-    const tick = () => {
-      if (step < delays.length) {
-        current = (current % 6) + 1;
-        setDrumDisplaySlot(current);
-        step += 1;
-        window.setTimeout(tick, delays[step - 1]);
-      } else {
-        setDrumDisplaySlot(finalSlot);
-        setDrumSpinning(false);
-        dispatch({ type: 'SET_ROULETTE_PLAYER', playerNum: finalSlot });
-      }
-    };
-    tick();
-  };
-
-  useEffect(() => {
-    setDrumDisplaySlot(state.roulettePlayerNum);
-  }, [state.roulettePlayerNum]);
-
-  // Горячие клавиши ведущего на проекторе (F5 / Пробел / Стрелки)
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (
-        document.activeElement &&
-        ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)
-      ) {
-        return;
-      }
-      if (state.stage === 'round' && state.subPhase === 'planning') {
-        if (e.key === 'F5') {
-          e.preventDefault();
-          dispatch({ type: 'LAUNCH_CLASH' });
-        }
-      } else if (state.stage === 'round' && state.subPhase === 'tracing') {
-        if (e.key === 'ArrowRight' || e.key === ' ') {
-          e.preventDefault();
-          const round =
-            ARENA_ROUNDS.find((r) => r.number === state.roundNumber) ||
-            ARENA_ROUNDS[0];
-          const sim = simulateClash(
-            round,
-            state.selectedAttackId || 'A1',
-            state.selectedDefenseId || 'D1'
-          );
-          if (state.traceStepIdx < sim.steps.length - 1) {
-            dispatch({ type: 'STEP_TRACE', stepIdx: state.traceStepIdx + 1 });
-          } else {
-            dispatch({ type: 'OPEN_ROULETTE' });
-          }
-        } else if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          if (state.traceStepIdx > 0) {
-            dispatch({ type: 'STEP_TRACE', stepIdx: state.traceStepIdx - 1 });
-          }
-        }
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [
-    state.stage,
-    state.subPhase,
-    state.roundNumber,
-    state.selectedAttackId,
-    state.selectedDefenseId,
-    state.traceStepIdx,
-  ]);
-
   const currentRound = useMemo(
     () =>
       ARENA_ROUNDS.find((r) => r.number === state.roundNumber) ||
@@ -184,10 +117,30 @@ export const ExceptionArenaApp: React.FC = () => {
       ? state.sandboxDefenseId
       : state.selectedDefenseId || 'D1';
 
-  const simulation = useMemo(
-    () => simulateClash(currentRound, activeAttackId, activeDefenseId),
-    [currentRound, activeAttackId, activeDefenseId]
-  );
+  // При переключении пресета атаки (A1..A3) синхронизируем поля аргументов вызова
+  useEffect(() => {
+    setUseCustomEval(false);
+    setCustomArgs((prev) =>
+      getCustomArgsForAttackPreset(state.roundNumber, activeAttackId, prev)
+    );
+  }, [state.roundNumber, activeAttackId]);
+
+  const simulation = useMemo(() => {
+    if (useCustomEval) {
+      return simulateCustomArgsClash(
+        currentRound,
+        customArgs,
+        activeDefenseId
+      );
+    }
+    return simulateClash(currentRound, activeAttackId, activeDefenseId);
+  }, [
+    useCustomEval,
+    currentRound,
+    customArgs,
+    activeAttackId,
+    activeDefenseId,
+  ]);
 
   // Живая вставка выбранного патча try/catch/finally в окно редактора
   const previewDefenseId = useMemo(() => {
@@ -221,6 +174,105 @@ export const ExceptionArenaApp: React.FC = () => {
       : state.subPhase === 'roulette' || state.subPhase === 'summary'
       ? simulation.steps[simulation.steps.length - 1]
       : null;
+
+  // Живая таблица переменных Locals / Watch для текущего шага отладчика
+  const localsRows = useMemo(
+    () => buildLocalsTable(currentRound, customArgs, activeStep, simulation),
+    [currentRound, customArgs, activeStep, simulation]
+  );
+
+  // Живое вращение механического селектора участников (01..06) с тактильными щелчками
+  const triggerDrumSpin = (targetPlayer?: 1 | 2 | 3 | 4 | 5 | 6) => {
+    const finalSlot =
+      targetPlayer ??
+      (((Math.floor(Math.random() * 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6));
+    setDrumSpinning(true);
+
+    const delays = [55, 65, 75, 90, 110, 135, 165, 200, 245];
+    let step = 0;
+    let current = drumDisplaySlot;
+
+    const tick = () => {
+      if (step < delays.length) {
+        current = (current % 6) + 1;
+        setDrumDisplaySlot(current);
+        soundEngine.playStepTick(stateRef.current.soundEnabled, 0.9 + step * 0.04);
+        step += 1;
+        window.setTimeout(tick, delays[step - 1]);
+      } else {
+        setDrumDisplaySlot(finalSlot);
+        setDrumSpinning(false);
+        soundEngine.playVerifiedTone(stateRef.current.soundEnabled);
+        dispatch({ type: 'SET_ROULETTE_PLAYER', playerNum: finalSlot });
+      }
+    };
+    tick();
+  };
+
+  useEffect(() => {
+    setDrumDisplaySlot(state.roulettePlayerNum);
+  }, [state.roulettePlayerNum]);
+
+  // Запуск произвольного вызова метода с введёнными аргументами C#
+  const runCustomMethodCall = () => {
+    setUseCustomEval(true);
+    dispatch({ type: 'LAUNCH_CLASH' });
+    soundEngine.playLockClick(state.soundEnabled);
+  };
+
+  // Горячие клавиши ведущего на проекторе (F5 / Пробел / Стрелки)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement &&
+        ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)
+      ) {
+        return;
+      }
+      if (state.stage === 'round' && state.subPhase === 'planning') {
+        if (e.key === 'F5') {
+          e.preventDefault();
+          soundEngine.playLockClick(state.soundEnabled);
+          dispatch({ type: 'LAUNCH_CLASH' });
+        }
+      } else if (state.stage === 'round' && state.subPhase === 'tracing') {
+        if (e.key === 'ArrowRight' || e.key === ' ') {
+          e.preventDefault();
+          if (state.traceStepIdx < simulation.steps.length - 1) {
+            const nextStep = simulation.steps[state.traceStepIdx + 1];
+            if (
+              nextStep?.stepKind === 'explode' ||
+              nextStep?.stepKind === 'compile_error' ||
+              nextStep?.stepKind === 'leak'
+            ) {
+              soundEngine.playExceptionInterrupt(state.soundEnabled);
+            } else {
+              soundEngine.playStepTick(state.soundEnabled);
+            }
+            dispatch({ type: 'STEP_TRACE', stepIdx: state.traceStepIdx + 1 });
+          } else {
+            dispatch({ type: 'OPEN_ROULETTE' });
+            triggerDrumSpin(state.roulettePlayerNum);
+          }
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          if (state.traceStepIdx > 0) {
+            soundEngine.playStepTick(state.soundEnabled, 0.85);
+            dispatch({ type: 'STEP_TRACE', stepIdx: state.traceStepIdx - 1 });
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    state.stage,
+    state.subPhase,
+    state.soundEnabled,
+    state.traceStepIdx,
+    state.roulettePlayerNum,
+    simulation.steps,
+  ]);
 
   const formatTimer = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -263,7 +315,10 @@ export const ExceptionArenaApp: React.FC = () => {
           <button
             type="button"
             className={`arena-pill-btn ${deviceRole === 'projector' ? 'active' : ''}`}
-            onClick={() => setDeviceRole('projector')}
+            onClick={() => {
+              soundEngine.playStepTick(state.soundEnabled);
+              setDeviceRole('projector');
+            }}
           >
             <span
               className={`arena-led ${deviceRole === 'projector' ? 'ok' : ''}`}
@@ -273,7 +328,10 @@ export const ExceptionArenaApp: React.FC = () => {
           <button
             type="button"
             className={`arena-pill-btn ${deviceRole === 'ALPHA' ? 'active' : ''}`}
-            onClick={() => setDeviceRole('ALPHA')}
+            onClick={() => {
+              soundEngine.playStepTick(state.soundEnabled);
+              setDeviceRole('ALPHA');
+            }}
           >
             <span
               className={`arena-led ${deviceRole === 'ALPHA' ? 'atk' : ''}`}
@@ -283,7 +341,10 @@ export const ExceptionArenaApp: React.FC = () => {
           <button
             type="button"
             className={`arena-pill-btn ${deviceRole === 'BETA' ? 'active' : ''}`}
-            onClick={() => setDeviceRole('BETA')}
+            onClick={() => {
+              soundEngine.playStepTick(state.soundEnabled);
+              setDeviceRole('BETA');
+            }}
           >
             <span
               className={`arena-led ${deviceRole === 'BETA' ? 'def' : ''}`}
@@ -305,7 +366,10 @@ export const ExceptionArenaApp: React.FC = () => {
                 className={`arena-pill-btn ${isCurrent ? 'active' : ''} ${
                   isDone ? 'done' : ''
                 }`}
-                onClick={() => dispatch({ type: 'SELECT_ROUND', roundNumber: rNum })}
+                onClick={() => {
+                  soundEngine.playStepTick(state.soundEnabled);
+                  dispatch({ type: 'SELECT_ROUND', roundNumber: rNum });
+                }}
               >
                 R{rNum}
               </button>
@@ -314,7 +378,10 @@ export const ExceptionArenaApp: React.FC = () => {
           <button
             type="button"
             className={`arena-pill-btn ${state.stage === 'finale' ? 'active' : ''}`}
-            onClick={() => dispatch({ type: 'GO_TO_FINALE' })}
+            onClick={() => {
+              soundEngine.playStepTick(state.soundEnabled);
+              dispatch({ type: 'GO_TO_FINALE' });
+            }}
           >
             Итог
           </button>
@@ -373,6 +440,16 @@ export const ExceptionArenaApp: React.FC = () => {
           <button
             type="button"
             className="arena-icon-btn"
+            onClick={() => dispatch({ type: 'TOGGLE_SOUND' })}
+            title="Включить / выключить аппаратный звук отладчика"
+          >
+            <span className={`arena-led ${state.soundEnabled ? 'ok' : ''}`} />
+            {state.soundEnabled ? 'Звук ВКЛ' : 'Звук ВЫКЛ'}
+          </button>
+
+          <button
+            type="button"
+            className="arena-icon-btn"
             onClick={() => dispatch({ type: 'TOGGLE_THEME' })}
             title="Переключить контрастную тему для проектора"
           >
@@ -416,6 +493,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 className="arena-primary-cta"
                 style={{ width: 'auto', padding: '12px 22px' }}
                 onClick={() => {
+                  soundEngine.playLockClick(state.soundEnabled);
                   setDeviceRole('projector');
                   dispatch({ type: 'START_GAME' });
                 }}
@@ -430,6 +508,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 type="button"
                 className="arena-device-card projector"
                 onClick={() => {
+                  soundEngine.playLockClick(state.soundEnabled);
                   setDeviceRole('projector');
                   dispatch({ type: 'START_GAME' });
                 }}
@@ -441,8 +520,8 @@ export const ExceptionArenaApp: React.FC = () => {
                 <div>
                   <h3>Центральный отладчик у доски</h3>
                   <p>
-                    Окно метода C#, пошаговый указатель выполнения CLR, панель
-                    состояния ресурсов БД и стека вызовов, селектор блиц-опроса.
+                    Окно метода C#, живой ввод аргументов вызова, таблица
+                    переменных Locals, панель ресурсов БД и стека вызовов.
                   </p>
                 </div>
                 <span className="arena-device-cta">
@@ -454,6 +533,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 type="button"
                 className="arena-device-card alpha"
                 onClick={() => {
+                  soundEngine.playLockClick(state.soundEnabled);
                   setDeviceRole('ALPHA');
                   dispatch({ type: 'START_GAME' });
                 }}
@@ -478,6 +558,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 type="button"
                 className="arena-device-card beta"
                 onClick={() => {
+                  soundEngine.playLockClick(state.soundEnabled);
                   setDeviceRole('BETA');
                   dispatch({ type: 'START_GAME' });
                 }}
@@ -556,12 +637,13 @@ export const ExceptionArenaApp: React.FC = () => {
                 className={`arena-step-chip ${
                   state.subPhase === 'planning' ? 'active' : ''
                 }`}
-                onClick={() =>
+                onClick={() => {
+                  soundEngine.playStepTick(state.soundEnabled);
                   dispatch({
                     type: 'SELECT_ROUND',
                     roundNumber: state.roundNumber,
-                  })
-                }
+                  });
+                }}
               >
                 01 Постановка хода
               </button>
@@ -570,7 +652,10 @@ export const ExceptionArenaApp: React.FC = () => {
                 className={`arena-step-chip ${
                   state.subPhase === 'tracing' ? 'active' : ''
                 }`}
-                onClick={() => dispatch({ type: 'LAUNCH_CLASH' })}
+                onClick={() => {
+                  soundEngine.playLockClick(state.soundEnabled);
+                  dispatch({ type: 'LAUNCH_CLASH' });
+                }}
               >
                 02 Отладчик CLR
               </button>
@@ -591,7 +676,10 @@ export const ExceptionArenaApp: React.FC = () => {
                 className={`arena-step-chip ${
                   state.subPhase === 'summary' ? 'active' : ''
                 }`}
-                onClick={() => dispatch({ type: 'OPEN_SUMMARY' })}
+                onClick={() => {
+                  soundEngine.playStepTick(state.soundEnabled);
+                  dispatch({ type: 'OPEN_SUMMARY' });
+                }}
               >
                 04 Разбор кода
               </button>
@@ -601,7 +689,7 @@ export const ExceptionArenaApp: React.FC = () => {
           {/* Двухколоночная сплит-сетка */}
           <div className="arena-work-grid">
             {/* ==============================================================
-                ЛЕВАЯ ПАНЕЛЬ: C# РЕДАКТОР + НИЖНИЙ ДОК ТЕЛЕМЕТРИИ CLR
+                ЛЕВАЯ ПАНЕЛЬ: C# РЕДАКТОР + ЖИВОЙ ВЫЗОВ МЕТОДА + ОКНО LOCALS + ДАТЧИКИ
                 ============================================================== */}
             <section className="arena-ide-column">
               <div className="arena-ide-window">
@@ -612,10 +700,10 @@ export const ExceptionArenaApp: React.FC = () => {
                   </div>
                   <span style={{ color: 'var(--arena-text-muted)' }}>
                     {state.subPhase === 'planning'
-                      ? 'Шаг 1: выберите строку в коде кликом мыши'
+                      ? 'Шаг 1: выберите опасную строку кликом мыши'
                       : previewDefenseId
-                      ? `Активная конфигурация защиты: ${previewDefenseId}`
-                      : 'Исходный метод без защиты'}
+                      ? `Активный патч защиты: ${previewDefenseId}`
+                      : 'Исходный метод'}
                   </span>
                 </div>
 
@@ -652,6 +740,7 @@ export const ExceptionArenaApp: React.FC = () => {
                         } ${isDefTarget ? 'target-defense' : ''}`}
                         onClick={() => {
                           if (state.subPhase !== 'planning') return;
+                          soundEngine.playStepTick(state.soundEnabled);
                           if (deviceRole === 'ALPHA') {
                             if (attacker === 'ALPHA') {
                               dispatch({
@@ -688,7 +777,6 @@ export const ExceptionArenaApp: React.FC = () => {
                           }
                         }}
                       >
-                        {/* Колонка отладчика: жёлтый указатель инструкции (▶) или точка прицела (●) */}
                         <span className="arena-gutter-marker">
                           {isActiveTrace ? (
                             <DebuggerPointerIcon />
@@ -735,20 +823,208 @@ export const ExceptionArenaApp: React.FC = () => {
                 </div>
               </div>
 
-              {/* НИЖНИЙ ДОК ТЕЛЕМЕТРИИ СРЕДЫ CLR */}
-              <div className="arena-telemetry-dock">
-                <div className="arena-telemetry-header">
-                  <span>
-                    CLR TELEMETRY //{' '}
-                    {state.subPhase === 'planning'
-                      ? 'Ожидание запуска метода (нажмите F5 или кнопку выполнения)'
-                      : activeStep
-                      ? activeStep.statusBanner
-                      : simulation.headline}
+              {/* ЖИВАЯ СТРОКА ВЫЗОВА C#-МЕТОДА СО СВОБОДНЫМ ВВОДОМ АРГУМЕНТОВ */}
+              <div className="arena-call-bar">
+                <div className="arena-call-expr">
+                  <span style={{ color: 'var(--arena-text-muted)' }}>
+                    ВЫЗОВ МЕТОДА:
                   </span>
-                  <span>.NET 8.0 Runtime</span>
+                  {currentRound.number === 1 && (
+                    <>
+                      <span>CalculateUnitCost(countText: &quot;</span>
+                      <input
+                        type="text"
+                        className="arena-arg-input"
+                        value={customArgs.r1CountText}
+                        onChange={(e) => {
+                          setUseCustomEval(true);
+                          setCustomArgs({
+                            ...customArgs,
+                            r1CountText: e.target.value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') runCustomMethodCall();
+                        }}
+                        aria-label="Аргумент countText"
+                      />
+                      <span>&quot;, total:</span>
+                      <input
+                        type="text"
+                        className="arena-arg-input"
+                        style={{ width: '68px' }}
+                        value={customArgs.r1Total}
+                        onChange={(e) => {
+                          setUseCustomEval(true);
+                          setCustomArgs({
+                            ...customArgs,
+                            r1Total: e.target.value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') runCustomMethodCall();
+                        }}
+                        aria-label="Аргумент total"
+                      />
+                      <span>);</span>
+                    </>
+                  )}
+
+                  {currentRound.number === 2 && (
+                    <>
+                      <span>ApplyPromoBonus(promo:</span>
+                      <button
+                        type="button"
+                        className={`arena-arg-toggle ${
+                          customArgs.r2PromoIsNull ? 'is-null' : ''
+                        }`}
+                        onClick={() => {
+                          setUseCustomEval(true);
+                          setCustomArgs({
+                            ...customArgs,
+                            r2PromoIsNull: !customArgs.r2PromoIsNull,
+                          });
+                        }}
+                      >
+                        {customArgs.r2PromoIsNull
+                          ? 'null (клик -> строка)'
+                          : `"${customArgs.r2PromoText}"`}
+                      </button>
+                      <span>, slotIndex:</span>
+                      <input
+                        type="text"
+                        className="arena-arg-input"
+                        style={{ width: '58px' }}
+                        value={customArgs.r2SlotIndex}
+                        onChange={(e) => {
+                          setUseCustomEval(true);
+                          setCustomArgs({
+                            ...customArgs,
+                            r2SlotIndex: e.target.value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') runCustomMethodCall();
+                        }}
+                        aria-label="Аргумент slotIndex"
+                      />
+                      <span>);</span>
+                    </>
+                  )}
+
+                  {currentRound.number === 3 && (
+                    <>
+                      <span>ExecuteTransfer(db, amount:</span>
+                      <input
+                        type="text"
+                        className="arena-arg-input"
+                        style={{ width: '68px' }}
+                        value={customArgs.r3Amount}
+                        onChange={(e) => {
+                          setUseCustomEval(true);
+                          setCustomArgs({
+                            ...customArgs,
+                            r3Amount: e.target.value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') runCustomMethodCall();
+                        }}
+                        aria-label="Аргумент amount"
+                      />
+                      <span>, divisor:</span>
+                      <input
+                        type="text"
+                        className="arena-arg-input"
+                        style={{ width: '58px' }}
+                        value={customArgs.r3Divisor}
+                        onChange={(e) => {
+                          setUseCustomEval(true);
+                          setCustomArgs({
+                            ...customArgs,
+                            r3Divisor: e.target.value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') runCustomMethodCall();
+                        }}
+                        aria-label="Аргумент divisor"
+                      />
+                      <span>);</span>
+                    </>
+                  )}
+
+                  {currentRound.number === 4 && (
+                    <>
+                      <span>AuthorizeCard(pinInput: &quot;</span>
+                      <input
+                        type="text"
+                        className="arena-arg-input"
+                        style={{ width: '130px' }}
+                        value={customArgs.r4PinInput}
+                        onChange={(e) => {
+                          setUseCustomEval(true);
+                          setCustomArgs({
+                            ...customArgs,
+                            r4PinInput: e.target.value,
+                          });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') runCustomMethodCall();
+                        }}
+                        aria-label="Аргумент pinInput"
+                      />
+                      <span>&quot;, auditLog);</span>
+                    </>
+                  )}
                 </div>
 
+                <button
+                  type="button"
+                  className="arena-icon-btn"
+                  onClick={runCustomMethodCall}
+                  title="Запустить метод с введёнными вручную аргументами"
+                >
+                  Проверить этот ввод →
+                </button>
+              </div>
+
+              {/* ЖИВАЯ ТАБЛИЦА ЛОКАЛЬНЫХ ПЕРЕМЕННЫХ ОТЛАДЧИКА (LOCALS / WATCH) */}
+              <div className="arena-locals-pane">
+                <div className="arena-locals-header">
+                  <span>LOCALS // ИМЯ</span>
+                  <span>ТЕКУЩЕЕ ЗНАЧЕНИЕ В ПАМЯТИ CLR</span>
+                  <span style={{ textAlign: 'right' }}>ТИП C#</span>
+                </div>
+                {localsRows.map((row) => (
+                  <div
+                    key={row.name}
+                    className={`arena-locals-row ${
+                      row.isFault
+                        ? 'is-fault'
+                        : row.changed
+                        ? 'is-changed'
+                        : ''
+                    }`}
+                  >
+                    <span className="arena-locals-name">
+                      <span
+                        className={`arena-led ${
+                          row.isFault ? 'bad' : row.changed ? 'warn' : ''
+                        }`}
+                      />
+                      {row.name}
+                    </span>
+                    <span className="arena-locals-val" title={row.value}>
+                      {row.value}
+                    </span>
+                    <span className="arena-locals-type">{row.type}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* НИЖНИЙ ДОК ТЕЛЕМЕТРИИ СРЕДЫ CLR */}
+              <div className="arena-telemetry-dock">
                 <div className="arena-sensors-row">
                   <div
                     className={`arena-sensor-card ${
@@ -1006,12 +1282,13 @@ export const ExceptionArenaApp: React.FC = () => {
                                 ? 'selected-atk'
                                 : ''
                             }`}
-                            onClick={() =>
+                            onClick={() => {
+                              soundEngine.playStepTick(state.soundEnabled);
                               dispatch({
                                 type: 'PICK_ATTACK_OPTION',
                                 optionId: atk.id,
-                              })
-                            }
+                              });
+                            }}
                           >
                             <div className="arena-option-left">
                               <span className="arena-voice-code atk">
@@ -1047,12 +1324,13 @@ export const ExceptionArenaApp: React.FC = () => {
                                 ? 'selected-def'
                                 : ''
                             }`}
-                            onClick={() =>
+                            onClick={() => {
+                              soundEngine.playStepTick(state.soundEnabled);
                               dispatch({
                                 type: 'PICK_DEFENSE_OPTION',
                                 optionId: def.id,
-                              })
-                            }
+                              });
+                            }}
                           >
                             <div className="arena-option-left">
                               <span className="arena-voice-code def">
@@ -1076,13 +1354,14 @@ export const ExceptionArenaApp: React.FC = () => {
                   <button
                     type="button"
                     className="arena-primary-cta"
-                    onClick={() =>
+                    onClick={() => {
+                      soundEngine.playLockClick(state.soundEnabled);
                       dispatch({
                         type: isLaptopAttacker
                           ? 'TOGGLE_ATTACK_LOCK'
                           : 'TOGGLE_DEFENSE_LOCK',
-                      })
-                    }
+                      });
+                    }}
                   >
                     {(
                       isLaptopAttacker ? state.attackLocked : state.defenseLocked
@@ -1170,13 +1449,14 @@ export const ExceptionArenaApp: React.FC = () => {
                               ? 'selected-atk'
                               : ''
                           }`}
-                          onClick={() =>
+                          onClick={() => {
+                            soundEngine.playStepTick(state.soundEnabled);
                             dispatch({
                               type: 'PICK_ATTACK_OPTION',
                               optionId: atk.id,
                               lockImmediately: true,
-                            })
-                          }
+                            });
+                          }}
                         >
                           <div className="arena-option-left">
                             <span className="arena-voice-code atk">
@@ -1213,13 +1493,14 @@ export const ExceptionArenaApp: React.FC = () => {
                               ? 'selected-def'
                               : ''
                           }`}
-                          onClick={() =>
+                          onClick={() => {
+                            soundEngine.playStepTick(state.soundEnabled);
                             dispatch({
                               type: 'PICK_DEFENSE_OPTION',
                               optionId: def.id,
                               lockImmediately: true,
-                            })
-                          }
+                            });
+                          }}
                         >
                           <div className="arena-option-left">
                             <span className="arena-voice-code def">
@@ -1242,9 +1523,19 @@ export const ExceptionArenaApp: React.FC = () => {
                   <button
                     type="button"
                     className="arena-primary-cta"
-                    onClick={() => dispatch({ type: 'LAUNCH_CLASH' })}
+                    onClick={() => {
+                      soundEngine.playLockClick(state.soundEnabled);
+                      dispatch({ type: 'LAUNCH_CLASH' });
+                    }}
                   >
-                    <kbd className="arena-kbd" style={{ background: 'rgba(0,0,0,0.25)', color: '#fff', borderColor: 'rgba(255,255,255,0.35)' }}>
+                    <kbd
+                      className="arena-kbd"
+                      style={{
+                        background: 'rgba(0,0,0,0.25)',
+                        color: '#fff',
+                        borderColor: 'rgba(255,255,255,0.35)',
+                      }}
+                    >
                       F5
                     </kbd>
                     <span>Скомпилировать патч и выполнить метод</span>
@@ -1262,11 +1553,11 @@ export const ExceptionArenaApp: React.FC = () => {
                       <div className="arena-envelope-top">
                         <span>ПАКЕТ АТАКИ</span>
                         <span className="arena-voice-code atk">
-                          {
-                            currentRound.attackOptions.find(
-                              (a) => a.id === activeAttackId
-                            )?.codeLabel
-                          }
+                          {useCustomEval
+                            ? 'СВОЙ ВВОД'
+                            : currentRound.attackOptions.find(
+                                (a) => a.id === activeAttackId
+                              )?.codeLabel}
                         </span>
                       </div>
                       <div
@@ -1276,11 +1567,11 @@ export const ExceptionArenaApp: React.FC = () => {
                           fontWeight: 700,
                         }}
                       >
-                        {
-                          currentRound.attackOptions.find(
-                            (a) => a.id === activeAttackId
-                          )?.payloadCode
-                        }
+                        {useCustomEval
+                          ? 'Произвольные аргументы из строки вызова'
+                          : currentRound.attackOptions.find(
+                              (a) => a.id === activeAttackId
+                            )?.payloadCode}
                       </div>
                     </div>
 
@@ -1339,12 +1630,13 @@ export const ExceptionArenaApp: React.FC = () => {
                       type="button"
                       className="arena-secondary-btn"
                       disabled={state.traceStepIdx === 0}
-                      onClick={() =>
+                      onClick={() => {
+                        soundEngine.playStepTick(state.soundEnabled, 0.85);
                         dispatch({
                           type: 'STEP_TRACE',
                           stepIdx: Math.max(0, state.traceStepIdx - 1),
-                        })
-                      }
+                        });
+                      }}
                     >
                       <kbd className="arena-kbd">←</kbd>
                       <span>Предыдущий шаг</span>
@@ -1355,15 +1647,26 @@ export const ExceptionArenaApp: React.FC = () => {
                       disabled={
                         state.traceStepIdx >= simulation.steps.length - 1
                       }
-                      onClick={() =>
+                      onClick={() => {
+                        const nextIdx = Math.min(
+                          simulation.steps.length - 1,
+                          state.traceStepIdx + 1
+                        );
+                        const nextStep = simulation.steps[nextIdx];
+                        if (
+                          nextStep?.stepKind === 'explode' ||
+                          nextStep?.stepKind === 'compile_error' ||
+                          nextStep?.stepKind === 'leak'
+                        ) {
+                          soundEngine.playExceptionInterrupt(state.soundEnabled);
+                        } else {
+                          soundEngine.playStepTick(state.soundEnabled);
+                        }
                         dispatch({
                           type: 'STEP_TRACE',
-                          stepIdx: Math.min(
-                            simulation.steps.length - 1,
-                            state.traceStepIdx + 1
-                          ),
-                        })
-                      }
+                          stepIdx: nextIdx,
+                        });
+                      }}
                     >
                       <span>Следующий шаг (Step Over)</span>
                       <kbd className="arena-kbd">→</kbd>
@@ -1392,13 +1695,16 @@ export const ExceptionArenaApp: React.FC = () => {
                   <div className="arena-roulette-box">
                     <div className="arena-roulette-header">
                       <div>
-                        <div className="arena-eyebrow" style={{ marginBottom: '2px' }}>
+                        <div
+                          className="arena-eyebrow"
+                          style={{ marginBottom: '2px' }}
+                        >
                           КОНТРОЛЬ ПОНИМАНИЯ КОДА (БЕЗ ПОДСКАЗОК КОМАНДЫ)
                         </div>
                         <div style={{ fontSize: '13px', fontWeight: 700 }}>
-                          Отвечает Участник №0{drumDisplaySlot} · На кону вторые 50%
-                          очков раунда (+{Math.round(currentRound.maxPoints / 2)}{' '}
-                          очк.)
+                          Отвечает Участник №0{drumDisplaySlot} · На кону вторые
+                          50% очков раунда (+
+                          {Math.round(currentRound.maxPoints / 2)} очк.)
                         </div>
                       </div>
                       <button
@@ -1449,12 +1755,19 @@ export const ExceptionArenaApp: React.FC = () => {
                             key={opt.id}
                             type="button"
                             className={`arena-roulette-opt-btn ${btnClass}`}
-                            onClick={() =>
+                            onClick={() => {
+                              if (opt.isCorrect) {
+                                soundEngine.playVerifiedTone(state.soundEnabled);
+                              } else {
+                                soundEngine.playExceptionInterrupt(
+                                  state.soundEnabled
+                                );
+                              }
                               dispatch({
                                 type: 'ANSWER_ROULETTE',
                                 optionId: opt.id,
-                              })
-                            }
+                              });
+                            }}
                           >
                             <span className="arena-voice-code def">
                               {opt.id}
@@ -1482,7 +1795,10 @@ export const ExceptionArenaApp: React.FC = () => {
                   <button
                     type="button"
                     className="arena-primary-cta"
-                    onClick={() => dispatch({ type: 'OPEN_SUMMARY' })}
+                    onClick={() => {
+                      soundEngine.playStepTick(state.soundEnabled);
+                      dispatch({ type: 'OPEN_SUMMARY' });
+                    }}
                   >
                     Открыть инженерный разбор раунда
                   </button>
@@ -1525,14 +1841,18 @@ export const ExceptionArenaApp: React.FC = () => {
                           key={atk.id}
                           type="button"
                           className={`arena-pill-btn ${
-                            activeAttackId === atk.id ? 'active' : ''
+                            !useCustomEval && activeAttackId === atk.id
+                              ? 'active'
+                              : ''
                           }`}
-                          onClick={() =>
+                          onClick={() => {
+                            soundEngine.playStepTick(state.soundEnabled);
+                            setUseCustomEval(false);
                             dispatch({
                               type: 'SET_SANDBOX_VARIANT',
                               attackId: atk.id,
-                            })
-                          }
+                            });
+                          }}
                         >
                           {atk.codeLabel}: {atk.payloadCode}
                         </button>
@@ -1552,12 +1872,13 @@ export const ExceptionArenaApp: React.FC = () => {
                           className={`arena-pill-btn ${
                             activeDefenseId === def.id ? 'active' : ''
                           }`}
-                          onClick={() =>
+                          onClick={() => {
+                            soundEngine.playStepTick(state.soundEnabled);
                             dispatch({
                               type: 'SET_SANDBOX_VARIANT',
                               defenseId: def.id,
-                            })
-                          }
+                            });
+                          }}
                         >
                           {def.codeLabel}: {def.title}
                         </button>
@@ -1569,12 +1890,13 @@ export const ExceptionArenaApp: React.FC = () => {
                     <button
                       type="button"
                       className="arena-primary-cta"
-                      onClick={() =>
+                      onClick={() => {
+                        soundEngine.playLockClick(state.soundEnabled);
                         dispatch({
                           type: 'SELECT_ROUND',
                           roundNumber: (state.roundNumber + 1) as RoundNumber,
-                        })
-                      }
+                        });
+                      }}
                     >
                       Перейти к Раунду 0{state.roundNumber + 1} (смена ролей
                       команд)
@@ -1583,7 +1905,10 @@ export const ExceptionArenaApp: React.FC = () => {
                     <button
                       type="button"
                       className="arena-primary-cta"
-                      onClick={() => dispatch({ type: 'GO_TO_FINALE' })}
+                      onClick={() => {
+                        soundEngine.playVerifiedTone(state.soundEnabled);
+                        dispatch({ type: 'GO_TO_FINALE' });
+                      }}
                     >
                       Открыть итоговую сводку и эталонный код C#
                     </button>
