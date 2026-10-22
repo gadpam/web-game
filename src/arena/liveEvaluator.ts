@@ -75,11 +75,11 @@ export function getCustomArgsForAttackPreset(
     }
   } else if (roundNumber === 3) {
     if (attackId === 'A1') {
-      next.r3Amount = '100';
-      next.r3Divisor = '0';
-    } else if (attackId === 'A2') {
       next.r3Amount = '-50';
       next.r3Divisor = '2';
+    } else if (attackId === 'A2') {
+      next.r3Amount = '100';
+      next.r3Divisor = '0';
     } else {
       next.r3Amount = '500';
       next.r3Divisor = '0';
@@ -254,10 +254,10 @@ export function simulateCustomArgsClash(
     const divVal = divisorParsed.ok && divisorParsed.value !== undefined ? divisorParsed.value : 0;
 
     if (amountVal <= 0) {
-      return simulateClash(round, 'A2', defenseId);
+      return simulateClash(round, 'A1', defenseId);
     }
     if (divVal === 0) {
-      return simulateClash(round, 'A1', defenseId);
+      return simulateClash(round, 'A2', defenseId);
     }
     // Штатный перевод без return и без деления на 0
     const resultTransfer = Math.trunc(amountVal / divVal);

@@ -683,7 +683,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         throwsException: null,
         explosionLine: null,
         earlyReturnLine: 4,
-        inlineValueHint: 'amount <= 0 ⏭ Ранний return false!',
+        inlineValueHint: 'amount <= 0 -> ранний return false',
       },
       {
         id: 'A2',

@@ -1,8 +1,8 @@
 {
-  "name": "uptime-night-shift",
-  "version": "1.0.0",
+  "name": "csharp-exception-arena",
+  "version": "2.0.0",
   "private": true,
-  "description": "АПТАЙМ · Ночная смена — учебная игра-расследование по механизму исключений (try-catch-finally, иерархия исключений)",
+  "description": "C# Exception Arena: Атака и Защита кода — практикум по обработке исключений C# (.NET CLR)",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
@@ -15,14 +15,12 @@
   },
   "dependencies": {
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "ws": "^8.18.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
-    "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
