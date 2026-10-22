@@ -25,14 +25,14 @@ const StepPointerIcon: React.FC = () => (
 );
 
 type SimpleTurnStep =
-  | 'attack_turn'
   | 'defense_turn'
+  | 'attack_turn'
   | 'result_view'
   | 'blitz_question';
 
 export const ExceptionArenaApp: React.FC = () => {
   const [state, rawDispatch] = useReducer(arenaReducer, undefined, loadArenaState);
-  const [turnStep, setTurnStep] = useState<SimpleTurnStep>('attack_turn');
+  const [turnStep, setTurnStep] = useState<SimpleTurnStep>('defense_turn');
   const [spinningPlayer, setSpinningPlayer] = useState(false);
   const [displayedPlayer, setDisplayedPlayer] = useState<number>(
     state.roulettePlayerNum
@@ -62,7 +62,7 @@ export const ExceptionArenaApp: React.FC = () => {
 
   useEffect(() => {
     if (state.subPhase === 'planning') {
-      setTurnStep('attack_turn');
+      setTurnStep('defense_turn');
     } else if (state.subPhase === 'tracing' || state.subPhase === 'summary') {
       setTurnStep('result_view');
     } else if (state.subPhase === 'roulette') {
@@ -90,9 +90,19 @@ export const ExceptionArenaApp: React.FC = () => {
     attacker === 'ALPHA' ? 'Команда Альфа' : 'Команда Бета';
   const defenderTeamTitle =
     defender === 'ALPHA' ? 'Команда Альфа' : 'Команда Бета';
+  const blitzTeamTitle =
+    state.rouletteAnsweringTeam === 'ALPHA' ? 'Команда Альфа' : 'Команда Бета';
 
-  const activeAttackId = state.selectedAttackId || 'A1';
-  const activeDefenseId = state.selectedDefenseId || 'D1';
+  // На Шаге 3 и 4 используем изолированный sandbox-выбор, чтобы переключение «А что если?» не портило боевой счёт
+  const activeAttackId =
+    turnStep === 'result_view' || turnStep === 'blitz_question'
+      ? state.sandboxAttackId || state.selectedAttackId || 'A1'
+      : state.selectedAttackId || 'A1';
+
+  const activeDefenseId =
+    turnStep === 'result_view' || turnStep === 'blitz_question'
+      ? state.sandboxDefenseId || state.selectedDefenseId || 'D1'
+      : state.selectedDefenseId || 'D1';
 
   const selectedAttackObj = useMemo(
     () =>
@@ -105,6 +115,26 @@ export const ExceptionArenaApp: React.FC = () => {
     () => simulateClash(currentRound, activeAttackId, activeDefenseId),
     [currentRound, activeAttackId, activeDefenseId]
   );
+
+  // Зафиксированный боевой исход раунда (для защиты от искажения при просмотре «А что если?»)
+  const lockedSimulation = useMemo(
+    () =>
+      simulateClash(
+        currentRound,
+        state.selectedAttackId || 'A1',
+        state.selectedDefenseId || 'D1'
+      ),
+    [currentRound, state.selectedAttackId, state.selectedDefenseId]
+  );
+
+  const isSandboxPreviewDifferent =
+    (turnStep === 'result_view' || turnStep === 'blitz_question') &&
+    ((state.sandboxAttackId &&
+      state.selectedAttackId &&
+      state.sandboxAttackId !== state.selectedAttackId) ||
+      (state.sandboxDefenseId &&
+        state.selectedDefenseId &&
+        state.sandboxDefenseId !== state.selectedDefenseId));
 
   // Автоматический плавный проход указателя по строкам кода при запуске проверки
   useEffect(() => {
@@ -131,8 +161,11 @@ export const ExceptionArenaApp: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [autoStepping, turnStep, state.traceStepIdx, simulation.steps]);
 
+  // На Шаге 1 (Защита) и Шаге 2 (Атака) показываем выбранный Защитой патч прямо в окне кода
   const previewDefenseId =
-    turnStep === 'attack_turn' ? null : state.selectedDefenseId;
+    turnStep === 'result_view' || turnStep === 'blitz_question'
+      ? activeDefenseId
+      : state.selectedDefenseId;
 
   const displayedCodeLines = useMemo(
     () => getPatchedCodeLines(currentRound, previewDefenseId),
@@ -216,7 +249,7 @@ export const ExceptionArenaApp: React.FC = () => {
                   }`}
                   onClick={() => {
                     setAutoStepping(false);
-                    setTurnStep('attack_turn');
+                    setTurnStep('defense_turn');
                     dispatch({ type: 'SELECT_ROUND', roundNumber: rNum });
                   }}
                 >
@@ -260,7 +293,7 @@ export const ExceptionArenaApp: React.FC = () => {
             className="arena-quiet-btn"
             onClick={() => {
               setAutoStepping(false);
-              setTurnStep('attack_turn');
+              setTurnStep('defense_turn');
               dispatch({ type: 'RESET_ALL' });
             }}
           >
@@ -278,9 +311,10 @@ export const ExceptionArenaApp: React.FC = () => {
             <div>
               <h1>Атака и Защита кода на C#</h1>
               <p>
-                Учебная игра из 4 раундов. В каждом раунде одна команда ищет,
-                какими входными данными вызвать сбой в методе C#, а вторая
-                подбирает защитную конструкцию <code>try / catch / finally</code>.
+                Учебная игра из 4 раундов. В каждом раунде команда Защиты
+                сначала выбирает патч <code>try / catch / finally</code> для
+                метода C#, а команда Атаки изучает этот код и ищет входные
+                данные, которые обнаружат уязвимость.
               </p>
             </div>
 
@@ -302,7 +336,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 type="button"
                 className="arena-main-btn"
                 onClick={() => {
-                  setTurnStep('attack_turn');
+                  setTurnStep('defense_turn');
                   dispatch({ type: 'START_GAME' });
                 }}
               >
@@ -360,7 +394,9 @@ export const ExceptionArenaApp: React.FC = () => {
                   <div
                     key={`${lineObj.lineNumber}-${lineObj.code}`}
                     className={`arena-line ${
-                      turnStep === 'attack_turn' ? 'clickable-line' : ''
+                      turnStep === 'attack_turn' && !lineObj.isAddedPatch
+                        ? 'clickable-line'
+                        : ''
                     } ${lineObj.isAddedPatch ? 'diff-added' : ''} ${
                       isAttackTargetedLine ? 'attack-targeted' : ''
                     } ${traceClass} ${isSkipped ? 'line-skipped' : ''}`}
@@ -415,15 +451,29 @@ export const ExceptionArenaApp: React.FC = () => {
 
             <div className="arena-code-footer">
               <span>
-                {turnStep === 'attack_turn'
-                  ? 'Можно выбрать карточку справа или кликнуть по опасной строке в коде'
-                  : previewDefenseId
-                  ? `В код подставлен вариант ${
+                {turnStep === 'defense_turn'
+                  ? previewDefenseId
+                    ? `В код подставлен патч Защиты ${
+                        currentRound.defenseOptions.find(
+                          (d) => d.id === previewDefenseId
+                        )?.codeLabel || previewDefenseId
+                      }`
+                    : 'Выберите вариант защиты справа, чтобы увидеть патч прямо в коде'
+                  : turnStep === 'attack_turn'
+                  ? `В коде установлен патч Защиты ${
                       currentRound.defenseOptions.find(
-                        (d) => d.id === previewDefenseId
-                      )?.codeLabel || previewDefenseId
-                    }`
-                  : 'Выберите вариант защиты справа, чтобы увидеть его в коде'}
+                        (d) => d.id === state.selectedDefenseId
+                      )?.codeLabel || 'З-1'
+                    } — найдите входные данные, которые его пробьют`
+                  : `Разбор: Защита ${
+                      currentRound.defenseOptions.find(
+                        (d) => d.id === activeDefenseId
+                      )?.codeLabel || activeDefenseId
+                    } против Атаки ${
+                      currentRound.attackOptions.find(
+                        (a) => a.id === activeAttackId
+                      )?.codeLabel || activeAttackId
+                    }`}
               </span>
               {currentRound.number === 3 &&
                 (turnStep === 'result_view' ||
@@ -443,78 +493,13 @@ export const ExceptionArenaApp: React.FC = () => {
               ---------------------------------------------------------------- */}
           <section className="arena-step-panel">
             {/* ==============================================================
-                ШАГ 1 ИЗ 4: ХОД КОМАНДЫ АТАКИ (ЧИСТЫЕ ВХОДНЫЕ ДАННЫЕ)
-                ============================================================== */}
-            {turnStep === 'attack_turn' && (
-              <>
-                <div>
-                  <div className="arena-step-progress">
-                    Шаг 1 из 4 · Ход команды Атаки ({attackerTeamTitle})
-                  </div>
-                  <h2 className="arena-step-heading">
-                    Какие входные данные передать в метод?
-                  </h2>
-                  <p className="arena-step-desc">
-                    Выберите набор аргументов, который проверит метод на
-                    прочность:
-                  </p>
-                </div>
-
-                <div className="arena-choices">
-                  {currentRound.attackOptions.map((atk) => {
-                    const isSelected = state.selectedAttackId === atk.id;
-                    return (
-                      <button
-                        key={atk.id}
-                        type="button"
-                        className={`arena-choice-btn ${
-                          isSelected ? 'selected-attack' : ''
-                        }`}
-                        onClick={() => {
-                          soundEngine.playStepTick(state.soundEnabled);
-                          dispatch({
-                            type: 'PICK_ATTACK_OPTION',
-                            optionId: atk.id,
-                          });
-                        }}
-                      >
-                        <div className="arena-choice-title">
-                          <span className="arena-choice-code">
-                            {atk.codeLabel}. {atk.payloadCode}
-                          </span>
-                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                            Строка {atk.targetLine}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="arena-actions-row">
-                  <button
-                    type="button"
-                    className="arena-main-btn attack-btn"
-                    disabled={!state.selectedAttackId}
-                    onClick={() => {
-                      soundEngine.playLockClick(state.soundEnabled);
-                      setTurnStep('defense_turn');
-                    }}
-                  >
-                    Передать ход команде Защиты →
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* ==============================================================
-                ШАГ 2 ИЗ 4: ХОД КОМАНДЫ ЗАЩИТЫ (БЕЗ СПОЙЛЕРОВ — ЧИТАЙТЕ КОД СЛЕВА)
+                ШАГ 1 ИЗ 4: ХОД КОМАНДЫ ЗАЩИТЫ (СТАВИТ ПАТЧ В МЕТОД)
                 ============================================================== */}
             {turnStep === 'defense_turn' && (
               <>
                 <div>
                   <div className="arena-step-progress">
-                    Шаг 2 из 4 · Ход команды Защиты ({defenderTeamTitle})
+                    Шаг 1 из 4 · Ход команды Защиты ({defenderTeamTitle})
                   </div>
                   <h2 className="arena-step-heading">
                     Какую конструкцию вставить в метод?
@@ -557,15 +542,80 @@ export const ExceptionArenaApp: React.FC = () => {
                 <div className="arena-actions-row">
                   <button
                     type="button"
-                    className="arena-back-btn"
-                    onClick={() => setTurnStep('attack_turn')}
+                    className="arena-main-btn"
+                    disabled={!state.selectedDefenseId}
+                    onClick={() => {
+                      soundEngine.playLockClick(state.soundEnabled);
+                      setTurnStep('attack_turn');
+                    }}
                   >
-                    ← Назад к Атаке
+                    Передать ход команде Атаки →
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ==============================================================
+                ШАГ 2 ИЗ 4: ХОД КОМАНДЫ АТАКИ (ИЗУЧАЕТ ПАТЧ И ИЩЕТ ПРОБОЙ)
+                ============================================================== */}
+            {turnStep === 'attack_turn' && (
+              <>
+                <div>
+                  <div className="arena-step-progress">
+                    Шаг 2 из 4 · Ход команды Атаки ({attackerTeamTitle})
+                  </div>
+                  <h2 className="arena-step-heading">
+                    Какими входными данными проверить этот код?
+                  </h2>
+                  <p className="arena-step-desc">
+                    Изучите выбранный патч Защиты слева и выберите аргументы,
+                    которые пробьют оборону или выявят ошибку:
+                  </p>
+                </div>
+
+                <div className="arena-choices">
+                  {currentRound.attackOptions.map((atk) => {
+                    const isSelected = state.selectedAttackId === atk.id;
+                    return (
+                      <button
+                        key={atk.id}
+                        type="button"
+                        className={`arena-choice-btn ${
+                          isSelected ? 'selected-attack' : ''
+                        }`}
+                        onClick={() => {
+                          soundEngine.playStepTick(state.soundEnabled);
+                          dispatch({
+                            type: 'PICK_ATTACK_OPTION',
+                            optionId: atk.id,
+                          });
+                        }}
+                      >
+                        <div className="arena-choice-title">
+                          <span className="arena-choice-code">
+                            {atk.codeLabel}. {atk.payloadCode}
+                          </span>
+                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            Строка {atk.targetLine}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="arena-actions-row">
+                  <button
+                    type="button"
+                    className="arena-back-btn"
+                    onClick={() => setTurnStep('defense_turn')}
+                  >
+                    ← Назад к Защите
                   </button>
                   <button
                     type="button"
-                    className="arena-main-btn"
-                    disabled={!state.selectedDefenseId}
+                    className="arena-main-btn attack-btn"
+                    disabled={!state.selectedAttackId}
                     onClick={() => {
                       soundEngine.playLockClick(state.soundEnabled);
                       dispatch({ type: 'LAUNCH_CLASH' });
@@ -587,6 +637,14 @@ export const ExceptionArenaApp: React.FC = () => {
                 <div>
                   <div className="arena-step-progress">
                     Шаг 3 из 4 · Результат выполнения метода
+                    {isSandboxPreviewDifferent && (
+                      <span>
+                        {' '}
+                        · Демо-просмотр (в бою: Защита +
+                        {lockedSimulation.defensePointsEarned} / Атака +
+                        {lockedSimulation.attackPointsEarned})
+                      </span>
+                    )}
                   </div>
                   <div
                     className={`arena-result-box ${simulation.outcome}`}
@@ -608,111 +666,111 @@ export const ExceptionArenaApp: React.FC = () => {
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       fontSize: '12px',
-                      fontWeight: 700,
-                      color: 'var(--text-muted)',
+                      color: 'var(--text-secondary)',
                     }}
                   >
                     <span>
-                      СТРОКА #{activeStep.activeLineNumber} (ШАГ{' '}
-                      {state.traceStepIdx + 1} ИЗ {simulation.steps.length})
+                      Шаг выполнения {state.traceStepIdx + 1} из{' '}
+                      {simulation.steps.length}
                     </span>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                      <button
-                        type="button"
-                        className="arena-mini-pill"
-                        disabled={state.traceStepIdx === 0}
-                        onClick={() => {
-                          setAutoStepping(false);
-                          soundEngine.playStepTick(state.soundEnabled);
-                          dispatch({
-                            type: 'STEP_TRACE',
-                            stepIdx: Math.max(0, state.traceStepIdx - 1),
-                          });
-                        }}
-                      >
-                        ← Шаг назад
-                      </button>
-                      <button
-                        type="button"
-                        className="arena-mini-pill"
-                        disabled={
-                          state.traceStepIdx >= simulation.steps.length - 1
-                        }
-                        onClick={() => {
-                          setAutoStepping(false);
-                          soundEngine.playStepTick(state.soundEnabled);
-                          dispatch({
-                            type: 'STEP_TRACE',
-                            stepIdx: Math.min(
-                              simulation.steps.length - 1,
-                              state.traceStepIdx + 1
-                            ),
-                          });
-                        }}
-                      >
-                        Шаг вперёд →
-                      </button>
-                    </div>
+                    <span>Строка {activeStep.activeLineNumber}</span>
                   </div>
 
-                  <div style={{ fontSize: '15px', fontWeight: 600 }}>
+                  <div className="arena-trace-status">
                     {activeStep.statusBanner}
                   </div>
 
-                  {/* Компактная строка быстрой проверки других вариантов («А что если?») */}
-                  <div
-                    style={{
-                      paddingTop: '8px',
-                      borderTop: '1px solid var(--border-subtle)',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '8px',
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div className="arena-inline-pills">
-                      {currentRound.attackOptions.map((atk) => (
+                  <div className="arena-trace-controls">
+                    <button
+                      type="button"
+                      className="arena-step-btn"
+                      disabled={state.traceStepIdx <= 0}
+                      onClick={() => {
+                        setAutoStepping(false);
+                        soundEngine.playStepTick(state.soundEnabled);
+                        dispatch({
+                          type: 'STEP_TRACE',
+                          stepIdx: Math.max(0, state.traceStepIdx - 1),
+                        });
+                      }}
+                    >
+                      ← Предыдущий шаг
+                    </button>
+                    <button
+                      type="button"
+                      className="arena-step-btn"
+                      disabled={
+                        state.traceStepIdx >= simulation.steps.length - 1
+                      }
+                      onClick={() => {
+                        setAutoStepping(false);
+                        const nextIdx = Math.min(
+                          simulation.steps.length - 1,
+                          state.traceStepIdx + 1
+                        );
+                        const nextStep = simulation.steps[nextIdx];
+                        if (
+                          nextStep?.stepKind === 'explode' ||
+                          nextStep?.stepKind === 'compile_error' ||
+                          nextStep?.stepKind === 'leak'
+                        ) {
+                          soundEngine.playExceptionInterrupt(state.soundEnabled);
+                        } else {
+                          soundEngine.playStepTick(state.soundEnabled);
+                        }
+                        dispatch({
+                          type: 'STEP_TRACE',
+                          stepIdx: nextIdx,
+                        });
+                      }}
+                    >
+                      Следующий шаг →
+                    </button>
+                  </div>
+
+                  {/* Компактная 1-строчная панель «А что если?» — изолирована от боевого счёта */}
+                  <div className="arena-inline-pills">
+                    <span className="arena-inline-pills-label">
+                      Проверить другой вариант:
+                    </span>
+                    <div className="arena-inline-pills-group">
+                      {currentRound.defenseOptions.map((d) => (
                         <button
-                          key={atk.id}
+                          key={d.id}
                           type="button"
                           className={`arena-mini-pill ${
-                            activeAttackId === atk.id ? 'active-atk' : ''
+                            activeDefenseId === d.id ? 'active-def' : ''
                           }`}
                           onClick={() => {
                             soundEngine.playStepTick(state.soundEnabled);
                             dispatch({
-                              type: 'PICK_ATTACK_OPTION',
-                              optionId: atk.id,
+                              type: 'SET_SANDBOX_VARIANT',
+                              defenseId: d.id,
                             });
-                            dispatch({ type: 'STEP_TRACE', stepIdx: 0 });
                             setAutoStepping(true);
                           }}
                         >
-                          {atk.codeLabel}
+                          {d.codeLabel}
                         </button>
                       ))}
-                    </div>
-
-                    <div className="arena-inline-pills">
-                      {currentRound.defenseOptions.map((def) => (
+                      <span className="arena-inline-sep">·</span>
+                      {currentRound.attackOptions.map((a) => (
                         <button
-                          key={def.id}
+                          key={a.id}
                           type="button"
                           className={`arena-mini-pill ${
-                            activeDefenseId === def.id ? 'active-def' : ''
+                            activeAttackId === a.id ? 'active-atk' : ''
                           }`}
                           onClick={() => {
                             soundEngine.playStepTick(state.soundEnabled);
                             dispatch({
-                              type: 'PICK_DEFENSE_OPTION',
-                              optionId: def.id,
+                              type: 'SET_SANDBOX_VARIANT',
+                              attackId: a.id,
                             });
-                            dispatch({ type: 'STEP_TRACE', stepIdx: 0 });
                             setAutoStepping(true);
                           }}
                         >
-                          {def.codeLabel}
+                          {a.codeLabel}
                         </button>
                       ))}
                     </div>
@@ -753,20 +811,39 @@ export const ExceptionArenaApp: React.FC = () => {
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
+                      gap: '8px',
                     }}
                   >
                     <span className="arena-step-progress">
-                      Шаг 4 из 4 · Контрольный вопрос (+
+                      Шаг 4 из 4 · Блиц для команды: {blitzTeamTitle} (+
                       {Math.round(currentRound.maxPoints / 2)} очков)
                     </span>
-                    <button
-                      type="button"
-                      className="arena-quiet-btn"
-                      disabled={spinningPlayer}
-                      onClick={spinPlayerNumber}
-                    >
-                      {spinningPlayer ? 'Выбор...' : 'Другой номер'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        className="arena-quiet-btn"
+                        disabled={state.roulettePointsAwarded}
+                        onClick={() =>
+                          dispatch({
+                            type: 'SET_ROULETTE_TEAM',
+                            team:
+                              state.rouletteAnsweringTeam === 'ALPHA'
+                                ? 'BETA'
+                                : 'ALPHA',
+                          })
+                        }
+                      >
+                        Сменить команду
+                      </button>
+                      <button
+                        type="button"
+                        className="arena-quiet-btn"
+                        disabled={spinningPlayer}
+                        onClick={spinPlayerNumber}
+                      >
+                        {spinningPlayer ? 'Выбор...' : 'Другой номер'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="arena-player-row" style={{ margin: '12px 0' }}>
@@ -783,7 +860,7 @@ export const ExceptionArenaApp: React.FC = () => {
                   </div>
 
                   <h2 className="arena-step-heading" style={{ fontSize: '18px' }}>
-                    Отвечает Игрок №{displayedPlayer}:{' '}
+                    Отвечает Игрок №{displayedPlayer} ({blitzTeamTitle}):{' '}
                     {currentRound.rouletteQuestion.prompt}
                   </h2>
                 </div>
@@ -843,7 +920,7 @@ export const ExceptionArenaApp: React.FC = () => {
                       type="button"
                       className="arena-main-btn"
                       onClick={() => {
-                        setTurnStep('attack_turn');
+                        setTurnStep('defense_turn');
                         dispatch({
                           type: 'SELECT_ROUND',
                           roundNumber: (state.roundNumber + 1) as RoundNumber,
@@ -923,7 +1000,7 @@ export const ExceptionArenaApp: React.FC = () => {
                 type="button"
                 className="arena-main-btn"
                 onClick={() => {
-                  setTurnStep('attack_turn');
+                  setTurnStep('defense_turn');
                   dispatch({ type: 'START_GAME' });
                 }}
               >

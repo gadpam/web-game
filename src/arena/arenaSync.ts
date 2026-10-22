@@ -30,17 +30,17 @@ export interface ArenaGameState {
   unlockedRules: RoundNumber[];
   roundHistory: Partial<Record<RoundNumber, RoundHistoryRecord>>;
 
-  // Текущий раунд: двухшаговый ввод Атаки (Шаг 1: строка -> Шаг 2: снаряд -> Шаг 3: замок )
+  // Боевой выбор Атаки
   attackTargetLine: number | null;
   selectedAttackId: 'A1' | 'A2' | 'A3' | null;
   attackLocked: boolean;
 
-  // Текущий раунд: двухшаговый ввод Защиты (Шаг 1: строка -> Шаг 2: конструкция -> Шаг 3: замок )
+  // Боевой выбор Защиты
   defenseTargetLine: number | null;
   selectedDefenseId: 'D1' | 'D2' | 'D3' | 'D4' | null;
   defenseLocked: boolean;
 
-  // Просмотр альтернативных вариантов после боя («А что если бы выбрали другой вариант?»)
+  // Изолированный демо-просмотр («А что если бы выбрали другой вариант?») — не влияет на счёт!
   sandboxAttackId: 'A1' | 'A2' | 'A3' | null;
   sandboxDefenseId: 'D1' | 'D2' | 'D3' | 'D4' | null;
 
@@ -48,7 +48,8 @@ export interface ArenaGameState {
   traceStepIdx: number;
   clashPointsAwarded: boolean;
 
-  // Слепая рулетка блиц-вопроса (против «одного отличника за ноутбуком»)
+  // Контрольный блиц-вопрос случайному участнику
+  rouletteAnsweringTeam: TeamId;
   roulettePlayerNum: 1 | 2 | 3 | 4 | 5 | 6;
   rouletteSelectedOptionId: string | null;
   roulettePointsAwarded: boolean;
@@ -61,15 +62,13 @@ export interface ArenaGameState {
   soundEnabled: boolean;
 }
 
-const STORAGE_KEY = 'cs_exception_arena_state_v2';
-const CHANNEL_NAME = 'cs_exception_arena_channel_v2';
+const STORAGE_KEY = 'cs_exception_arena_state_v3';
+const CHANNEL_NAME = 'cs_exception_arena_channel_v3';
 
 export function getTeamsForRound(roundNumber: RoundNumber): {
   attacker: TeamId;
   defender: TeamId;
 } {
-  // Нечётные раунды (1, 3): АЛЬФА атакует, БЕТА защищается
-  // Чётные раунды (2, 4): БЕТА атакует, АЛЬФА защищается
   return roundNumber % 2 === 1
     ? { attacker: 'ALPHA', defender: 'BETA' }
     : { attacker: 'BETA', defender: 'ALPHA' };
@@ -101,7 +100,8 @@ export function createInitialArenaState(): ArenaGameState {
     traceStepIdx: 0,
     clashPointsAwarded: false,
 
-    roulettePlayerNum: 1,
+    rouletteAnsweringTeam: 'BETA',
+    roulettePlayerNum: 2,
     rouletteSelectedOptionId: null,
     roulettePointsAwarded: false,
 
@@ -128,6 +128,7 @@ export type ArenaAction =
   | { type: 'STEP_TRACE'; stepIdx: number }
   | { type: 'OPEN_ROULETTE' }
   | { type: 'SET_ROULETTE_PLAYER'; playerNum: 1 | 2 | 3 | 4 | 5 | 6 }
+  | { type: 'SET_ROULETTE_TEAM'; team: TeamId }
   | { type: 'ANSWER_ROULETTE'; optionId: string }
   | { type: 'OPEN_SUMMARY' }
   | { type: 'SET_SANDBOX_VARIANT'; attackId?: 'A1' | 'A2' | 'A3'; defenseId?: 'D1' | 'D2' | 'D3' | 'D4' }
@@ -140,9 +141,9 @@ export type ArenaAction =
   | { type: 'SYNC_FROM_REMOTE'; payload: ArenaGameState };
 
 function prepareRoundFields(roundNumber: RoundNumber): Partial<ArenaGameState> {
-  // Выбираем неповторяющийся номер игрока (1..6) для слепой рулетки
   const playerRotation: (1 | 2 | 3 | 4 | 5 | 6)[] = [2, 4, 5, 3];
   const nextPlayer = playerRotation[(roundNumber - 1) % playerRotation.length];
+  const { defender } = getTeamsForRound(roundNumber);
 
   return {
     stage: 'round',
@@ -158,6 +159,7 @@ function prepareRoundFields(roundNumber: RoundNumber): Partial<ArenaGameState> {
     sandboxDefenseId: null,
     traceStepIdx: 0,
     clashPointsAwarded: false,
+    rouletteAnsweringTeam: defender,
     roulettePlayerNum: nextPlayer,
     rouletteSelectedOptionId: null,
     roulettePointsAwarded: false,
@@ -213,7 +215,7 @@ export function arenaReducer(
       const opt = round.attackOptions.find((a) => a.id === action.optionId);
       return {
         ...state,
-        attackTargetLine: state.attackTargetLine ?? (opt ? opt.targetLine : 3),
+        attackTargetLine: opt ? opt.targetLine : state.attackTargetLine ?? 4,
         selectedAttackId: action.optionId,
         attackLocked: action.lockImmediately ? true : state.attackLocked,
       };
@@ -241,7 +243,7 @@ export function arenaReducer(
       const opt = round.defenseOptions.find((d) => d.id === action.optionId);
       return {
         ...state,
-        defenseTargetLine: state.defenseTargetLine ?? (opt ? opt.targetLine : 3),
+        defenseTargetLine: opt ? opt.targetLine : state.defenseTargetLine ?? 3,
         selectedDefenseId: action.optionId,
         defenseLocked: action.lockImmediately ? true : state.defenseLocked,
       };
@@ -261,12 +263,11 @@ export function arenaReducer(
       const finalAttackId = state.selectedAttackId || 'A1';
       const finalDefenseId = state.selectedDefenseId || 'D1';
       const sim = simulateClash(round, finalAttackId, finalDefenseId);
-      const { attacker, defender } = getTeamsForRound(state.roundNumber);
+      const { attacker } = getTeamsForRound(state.roundNumber);
 
       let alphaScore = state.alphaScore;
       let betaScore = state.betaScore;
 
-      // Начисляем первые 50% очков за сам боевой ход (только один раз за раунд)
       if (!state.clashPointsAwarded) {
         if (attacker === 'ALPHA') {
           alphaScore += sim.attackPointsEarned;
@@ -281,15 +282,26 @@ export function arenaReducer(
         ? state.unlockedRules
         : [...state.unlockedRules, state.roundNumber];
 
+      // По умолчанию право ответа на блиц-вопрос получает сторона, выигравшая технический ход
+      const roundTechWinner: TeamId =
+        sim.outcome === 'BREACHED'
+          ? attacker
+          : attacker === 'ALPHA'
+          ? 'BETA'
+          : 'ALPHA';
+
       return {
         ...state,
         selectedAttackId: finalAttackId,
         selectedDefenseId: finalDefenseId,
+        sandboxAttackId: finalAttackId,
+        sandboxDefenseId: finalDefenseId,
         attackLocked: true,
         defenseLocked: true,
         subPhase: 'tracing',
         traceStepIdx: 0,
         clashPointsAwarded: true,
+        rouletteAnsweringTeam: roundTechWinner,
         alphaScore,
         betaScore,
         unlockedRules,
@@ -315,6 +327,13 @@ export function arenaReducer(
         roulettePlayerNum: action.playerNum,
       };
 
+    case 'SET_ROULETTE_TEAM':
+      if (state.roulettePointsAwarded) return state;
+      return {
+        ...state,
+        rouletteAnsweringTeam: action.team,
+      };
+
     case 'ANSWER_ROULETTE': {
       if (state.roulettePointsAwarded) {
         return {
@@ -332,8 +351,8 @@ export function arenaReducer(
       const isCorrect = Boolean(chosen?.isCorrect);
       const bonusPool = Math.round(round.maxPoints / 2);
 
-      // Если верный ответ на блиц-вопрос рулетки — обе команды, верно понимающие код, или защищающаяся сторона получает вторые 50% очков!
       const { attacker, defender } = getTeamsForRound(state.roundNumber);
+      // Всегда берём настоящий боевой ход команд (selectedAttackId / selectedDefenseId), а не sandbox!
       const sim = simulateClash(
         round,
         state.selectedAttackId || 'A1',
@@ -343,9 +362,7 @@ export function arenaReducer(
       let alphaDelta = 0;
       let betaDelta = 0;
       if (isCorrect) {
-        // Вторые 50% очков идут победившей стороне раунда (или поровну, если частичный перехват)
-        const winnerTeam = sim.outcome === 'BREACHED' ? attacker : defender;
-        if (winnerTeam === 'ALPHA') alphaDelta = bonusPool;
+        if (state.rouletteAnsweringTeam === 'ALPHA') alphaDelta = bonusPool;
         else betaDelta = bonusPool;
       }
 
@@ -383,15 +400,24 @@ export function arenaReducer(
       return {
         ...state,
         subPhase: 'summary',
-        sandboxAttackId: state.selectedAttackId || 'A1',
-        sandboxDefenseId: state.selectedDefenseId || 'D1',
+        sandboxAttackId: state.sandboxAttackId ?? state.selectedAttackId ?? 'A1',
+        sandboxDefenseId: state.sandboxDefenseId ?? state.selectedDefenseId ?? 'D1',
       };
 
     case 'SET_SANDBOX_VARIANT':
       return {
         ...state,
-        sandboxAttackId: action.attackId ?? state.sandboxAttackId ?? state.selectedAttackId ?? 'A1',
-        sandboxDefenseId: action.defenseId ?? state.sandboxDefenseId ?? state.selectedDefenseId ?? 'D1',
+        traceStepIdx: 0,
+        sandboxAttackId:
+          action.attackId ??
+          state.sandboxAttackId ??
+          state.selectedAttackId ??
+          'A1',
+        sandboxDefenseId:
+          action.defenseId ??
+          state.sandboxDefenseId ??
+          state.selectedDefenseId ??
+          'D1',
       };
 
     case 'TICK_TIMER':
@@ -460,7 +486,7 @@ export function saveArenaState(state: ArenaGameState): void {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // ignore quota errors
+    // ignore
   }
 }
 

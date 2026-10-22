@@ -1,6 +1,6 @@
 // ============================================================================
-// C# EXCEPTION ARENA: АТАКА vs ЗАЩИТА
-// Ядро данных, 4 боевых раунда, живая сборка C#-кода и пошаговый трассировщик
+// C# EXCEPTION ARENA: АТАКА И ЗАЩИТА КОДА
+// Ядро данных, 4 раунда без спойлеров и детерминированный симулятор CLR
 // ============================================================================
 
 export type TeamId = 'ALPHA' | 'BETA';
@@ -8,11 +8,6 @@ export type RoundNumber = 1 | 2 | 3 | 4;
 export type ArenaStage = 'welcome' | 'round' | 'finale';
 export type RoundSubPhase = 'planning' | 'tracing' | 'roulette' | 'summary';
 export type DeviceRole = 'projector' | 'ALPHA' | 'BETA';
-
-export interface CodeToken {
-  text: string;
-  kind: 'kw' | 'type' | 'fn' | 'str' | 'num' | 'comment' | 'plain' | 'danger';
-}
 
 export interface BaseCodeLine {
   lineNumber: number;
@@ -24,14 +19,15 @@ export interface BaseCodeLine {
 
 export interface AttackOption {
   id: 'A1' | 'A2' | 'A3';
-  codeLabel: string; // Короткий голосовой код (Ловушка №26: если упал Wi-Fi)
+  codeLabel: string;
   targetLine: number;
   payloadCode: string;
   expectedException: string;
   shortDesc: string;
-  throwsException: string | null; // null если вход безопасный
+  throwsException: string | null;
   explosionLine: number | null;
   earlyReturnLine?: number | null;
+  normalReturnLine?: number | null;
   inlineValueHint: string;
 }
 
@@ -45,7 +41,13 @@ export interface DefenseOption {
     lineNumber: number;
     code: string;
     isAddedPatch?: boolean;
-    roleTag?: 'try' | 'catch_specific' | 'catch_general' | 'finally' | 'body' | 'after';
+    roleTag?:
+      | 'try'
+      | 'catch_specific'
+      | 'catch_general'
+      | 'finally'
+      | 'body'
+      | 'after';
     catchesTypes?: string[];
   }[];
   compileError?: {
@@ -54,13 +56,13 @@ export interface DefenseOption {
     errorLine: number;
   };
   catchesExceptions: string[];
-  blindCatchPenalty?: boolean; // Ловушка №5/7: слепой catch (Exception) без точного типа
+  blindCatchPenalty?: boolean;
   closesDbOnNormal: boolean;
   closesDbOnReturn: boolean;
   closesDbOnException: boolean;
   logsErrorWithDetails: boolean;
   swallowsErrorSilently?: boolean;
-  resetsStackTrace?: boolean; // throw ex;
+  resetsStackTrace?: boolean;
 }
 
 export interface RouletteQuestion {
@@ -77,10 +79,10 @@ export interface RoundSpec {
   number: RoundNumber;
   title: string;
   subtitle: string;
-  maxPoints: number; // Растущие ставки: 100, 150, 200, 300
+  maxPoints: number;
   ruleTitle: string;
   ruleSummary: string;
-  engineeringNote: string; // Ловушка №11: когда нужен if/TryParse вместо try-catch
+  engineeringNote: string;
   methodSignature: string;
   baseLines: BaseCodeLine[];
   attackOptions: AttackOption[];
@@ -91,10 +93,17 @@ export interface RoundSpec {
 export interface TraceStep {
   stepIndex: number;
   activeLineNumber: number;
-  skippedLineNumbers: number[]; // Ловушка №12/22: строки внутри try после взрыва
+  skippedLineNumbers: number[];
   inlineBadge: string;
   statusBanner: string;
-  stepKind: 'normal' | 'explode' | 'catch' | 'finally' | 'compile_error' | 'leak' | 'done';
+  stepKind:
+    | 'normal'
+    | 'explode'
+    | 'catch'
+    | 'finally'
+    | 'compile_error'
+    | 'leak'
+    | 'done';
   dbState: 'CLOSED' | 'OPEN' | 'LEAK';
   logState: 'EMPTY' | 'LOGGED' | 'SWALLOWED';
   stackState: 'INTACT' | 'RESET';
@@ -114,74 +123,56 @@ export interface ClashSimulationResult {
 
 export const ARENA_ROUNDS: RoundSpec[] = [
   // ==========================================================================
-  // РАУНД 1: ТОЧНЫЙ ПРИЦЕЛ (100 ОЧКОВ)
+  // РАУНД 1: ТОЧНЫЙ ПРИЦЕЛ (100 ОЧКОВ) — Лучшая защита: D3 (З-3), Блиц: R1_2
   // ==========================================================================
   {
     number: 1,
     title: 'Точный прицел',
-    subtitle: 'У каждого падения в C# есть свой тип исключения и строка-адрес',
+    subtitle: 'У каждого сбоя в C# есть свой тип исключения и строка возникновения',
     maxPoints: 100,
-    ruleTitle: 'Правило №1: Прицельный catch (Тип)',
+    ruleTitle: 'Правило №1: Прицельный перехват по типам',
     ruleSummary:
-      'Оборачивайте в try опасную операцию и ловите конкретный тип исключения (FormatException, DivideByZeroException), а не безликий Exception.',
+      'Оборачивайте опасные вычисления в try и перехватывайте конкретные типы исключений (FormatException, DivideByZeroException), чтобы точно знать причину сбоя.',
     engineeringNote:
-      'Инженерный совет: в реальном продакшене для парсинга пользовательских строк ещё дешевле использовать int.TryParse(), чтобы вообще не бросать исключение.',
+      'В продакшене для чтения пользовательского ввода также применяют int.TryParse(), чтобы избежать накладных расходов на выброс исключения.',
     methodSignature: 'int BuyTickets(string countText, int groupSize)',
     baseLines: [
-      {
-        lineNumber: 1,
-        indent: 0,
-        code: 'int BuyTickets(string countText, int groupSize)',
-      },
-      {
-        lineNumber: 2,
-        indent: 0,
-        code: '{',
-      },
+      { lineNumber: 1, indent: 0, code: 'int BuyTickets(string countText, int groupSize)' },
+      { lineNumber: 2, indent: 0, code: '{' },
       {
         lineNumber: 3,
         indent: 1,
         code: 'int tickets = int.Parse(countText);',
         isClickableTarget: true,
-        targetHint: 'Строка 3: парсинг текста в число int.Parse',
       },
       {
         lineNumber: 4,
         indent: 1,
         code: 'int perPerson = tickets / groupSize;',
         isClickableTarget: true,
-        targetHint: 'Строка 4: целочисленное деление на groupSize',
       },
-      {
-        lineNumber: 5,
-        indent: 1,
-        code: 'return perPerson;',
-      },
-      {
-        lineNumber: 6,
-        indent: 0,
-        code: '}',
-      },
+      { lineNumber: 5, indent: 1, code: 'return perPerson;' },
+      { lineNumber: 6, indent: 0, code: '}' },
     ],
     attackOptions: [
       {
         id: 'A1',
         codeLabel: 'А-1',
-        targetLine: 3,
+        targetLine: 4,
         payloadCode: 'countText = "два", groupSize = 2',
         expectedException: 'FormatException',
-        shortDesc: 'Текст "два" вместо цифр обрушит int.Parse на строке 3',
+        shortDesc: 'Передать словесную строку вместо числа в int.Parse',
         throwsException: 'FormatException',
         explosionLine: 3,
-        inlineValueHint: 'countText = "два" -> throw FormatException',
+        inlineValueHint: 'int.Parse("два") -> throw FormatException',
       },
       {
         id: 'A2',
         codeLabel: 'А-2',
-        targetLine: 4,
+        targetLine: 5,
         payloadCode: 'countText = "12", groupSize = 0',
         expectedException: 'DivideByZeroException',
-        shortDesc: 'Ноль в делителе groupSize = 0 взорвёт деление на строке 4',
+        shortDesc: 'Передать корректное число "12" и нулевой делитель groupSize = 0',
         throwsException: 'DivideByZeroException',
         explosionLine: 4,
         inlineValueHint: '12 / 0 -> throw DivideByZeroException',
@@ -189,57 +180,21 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'A3',
         codeLabel: 'А-3',
-        targetLine: 3,
-        payloadCode: 'countText = "10", groupSize = 5',
-        expectedException: 'Без исключения (Холостой ход)',
-        shortDesc: 'Корректные данные: метод вернёт 2 без всякого падения',
-        throwsException: null,
-        explosionLine: null,
-        inlineValueHint: '10 / 5 = 2 (Штатно)',
+        targetLine: 4,
+        payloadCode: 'countText = "", groupSize = 0',
+        expectedException: 'FormatException',
+        shortDesc: 'Пустая строка в countText и одновременный ноль в groupSize',
+        throwsException: 'FormatException',
+        explosionLine: 3,
+        inlineValueHint: 'int.Parse("") -> throw FormatException до деления',
       },
     ],
     defenseOptions: [
       {
         id: 'D1',
         codeLabel: 'З-1',
-        title: 'Два блока: catch (FormatException) и catch (DivideByZeroException)',
-        shortDesc: 'Отдельный обработчик для каждого типа исключения',
-        targetLine: 3,
-        patchedLines: [
-          { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
-          { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 4, code: '    int tickets = int.Parse(countText);', roleTag: 'body' },
-          { lineNumber: 5, code: '    int perPerson = tickets / groupSize;', roleTag: 'body' },
-          { lineNumber: 6, code: '    return perPerson;', roleTag: 'body' },
-          { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
-          {
-            lineNumber: 8,
-            code: '  catch (FormatException ex) { Log(ex.Message); return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['FormatException'],
-          },
-          {
-            lineNumber: 9,
-            code: '  catch (DivideByZeroException ex) { Log(ex.Message); return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['DivideByZeroException'],
-          },
-          { lineNumber: 10, code: '}', roleTag: 'body' },
-        ],
-        catchesExceptions: ['FormatException', 'DivideByZeroException'],
-        closesDbOnNormal: true,
-        closesDbOnReturn: true,
-        closesDbOnException: true,
-        logsErrorWithDetails: true,
-      },
-      {
-        id: 'D2',
-        codeLabel: 'З-2',
         title: 'Один блок: catch (FormatException)',
-        shortDesc: 'Перехват ошибок преобразования строки в число',
+        shortDesc: 'Обработчик ошибок преобразования строки в число',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
@@ -265,39 +220,10 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         logsErrorWithDetails: true,
       },
       {
-        id: 'D3',
-        codeLabel: 'З-3',
-        title: 'Один блок: catch (DivideByZeroException)',
-        shortDesc: 'Перехват ошибок целочисленного деления',
-        targetLine: 4,
-        patchedLines: [
-          { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
-          { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 4, code: '    int tickets = int.Parse(countText);', roleTag: 'body' },
-          { lineNumber: 5, code: '    int perPerson = tickets / groupSize;', roleTag: 'body' },
-          { lineNumber: 6, code: '    return perPerson;', roleTag: 'body' },
-          { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
-          {
-            lineNumber: 8,
-            code: '  catch (DivideByZeroException ex) { Log(ex.Message); return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['DivideByZeroException'],
-          },
-          { lineNumber: 9, code: '}', roleTag: 'body' },
-        ],
-        catchesExceptions: ['DivideByZeroException'],
-        closesDbOnNormal: true,
-        closesDbOnReturn: true,
-        closesDbOnException: true,
-        logsErrorWithDetails: true,
-      },
-      {
-        id: 'D4',
-        codeLabel: 'З-4',
+        id: 'D2',
+        codeLabel: 'З-2',
         title: 'Один общий блок: catch (Exception)',
-        shortDesc: 'Универсальный перехват базового типа Exception без уточнения причины',
+        shortDesc: 'Перехват базового типа Exception без разделения причин сбоя',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
@@ -323,231 +249,37 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         closesDbOnException: true,
         logsErrorWithDetails: false,
       },
-    ],
-    rouletteQuestion: {
-      prompt:
-        'Что происходит со строкой 5 (int perPerson = tickets / groupSize), когда на строке 4 в int.Parse("два") вылетает FormatException?',
-      options: [
-        {
-          id: 'R1_1',
-          text: 'Она пропускается: управление мгновенно прыгает из строки 4 прямо в подходящий блок catch',
-          isCorrect: true,
-          explanation:
-            'Верно! При выбросе исключения все оставшиеся строки внутри блока try пропускаются.',
-        },
-        {
-          id: 'R1_2',
-          text: 'Сначала срабатывает блок catch, а затем программа возвращается в try и досчитывает строку 5',
-          isCorrect: false,
-          explanation:
-            'Это главная ловушка новичков! Программа никогда не возвращается обратно внутрь блока try после входа в catch.',
-        },
-        {
-          id: 'R1_3',
-          text: 'В переменную tickets записывается 0, и строка 5 выполняется дальше',
-          isCorrect: false,
-          explanation:
-            'Нет, int.Parse не возвращает 0 при сбое — он немедленно прерывает выполнение строки выбросом FormatException.',
-        },
-      ],
-    },
-  },
-
-  // ==========================================================================
-  // РАУНД 2: ЛОВУШКА ПОРЯДКА И CS0160 (150 ОЧКОВ)
-  // ==========================================================================
-  {
-    number: 2,
-    title: 'Порядок блоков catch',
-    subtitle: 'Почему в C# нельзя ставить общий catch (Exception) выше частных типов',
-    maxPoints: 150,
-    ruleTitle: 'Правило №2: От частного к общему (Без CS0160)',
-    ruleSummary:
-      'Базовый класс Exception — предок всех исключений. Если поставить catch (Exception) первым, ветки ниже станут недостижимыми, и компилятор C# заблокирует сборку ошибкой CS0160.',
-    engineeringNote:
-      'Инженерный совет: ставьте сверху самые конкретные исключения, а общий catch (Exception) — только в самом конце как последний рубеж.',
-    methodSignature: 'int GetDiscount(string promo, int[] table, int idx)',
-    baseLines: [
-      {
-        lineNumber: 1,
-        indent: 0,
-        code: 'int GetDiscount(string promo, int[] table, int idx)',
-      },
-      {
-        lineNumber: 2,
-        indent: 0,
-        code: '{',
-      },
-      {
-        lineNumber: 3,
-        indent: 1,
-        code: 'int codeLen = promo.Trim().Length;',
-        isClickableTarget: true,
-        targetHint: 'Строка 3: вызов метода у ссылки promo (опасно при null)',
-      },
-      {
-        lineNumber: 4,
-        indent: 1,
-        code: 'int discount = table[idx];',
-        isClickableTarget: true,
-        targetHint: 'Строка 4: обращение к массиву по индексу idx',
-      },
-      {
-        lineNumber: 5,
-        indent: 1,
-        code: 'return discount + codeLen;',
-      },
-      {
-        lineNumber: 6,
-        indent: 0,
-        code: '}',
-      },
-    ],
-    attackOptions: [
-      {
-        id: 'A1',
-        codeLabel: 'А-1',
-        targetLine: 3,
-        payloadCode: 'promo = null, idx = 1',
-        expectedException: 'NullReferenceException',
-        shortDesc: 'Пустая ссылка promo = null взорвёт вызов promo.Trim() на строке 3',
-        throwsException: 'NullReferenceException',
-        explosionLine: 3,
-        inlineValueHint: 'promo == null -> throw NullReferenceException',
-      },
-      {
-        id: 'A2',
-        codeLabel: 'А-2',
-        targetLine: 4,
-        payloadCode: 'promo = "SALE", idx = 99',
-        expectedException: 'IndexOutOfRangeException',
-        shortDesc: 'Индекс 99 за пределами массива взорвёт table[idx] на строке 4',
-        throwsException: 'IndexOutOfRangeException',
-        explosionLine: 4,
-        inlineValueHint: 'table[99] -> throw IndexOutOfRangeException',
-      },
-      {
-        id: 'A3',
-        codeLabel: 'А-3',
-        targetLine: 4,
-        payloadCode: 'promo = "VIP", idx = -1',
-        expectedException: 'IndexOutOfRangeException',
-        shortDesc: 'Отрицательный индекс -1 вызовет IndexOutOfRangeException на строке 4',
-        throwsException: 'IndexOutOfRangeException',
-        explosionLine: 4,
-        inlineValueHint: 'table[-1] -> throw IndexOutOfRangeException',
-      },
-    ],
-    defenseOptions: [
-      {
-        id: 'D1',
-        codeLabel: 'З-1',
-        title: 'NullReferenceException -> IndexOutOfRangeException -> Exception',
-        shortDesc: 'Сначала узкие типы исключений, общий Exception в конце',
-        targetLine: 3,
-        patchedLines: [
-          { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
-          { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 4, code: '    int codeLen = promo.Trim().Length;', roleTag: 'body' },
-          { lineNumber: 5, code: '    int discount = table[idx];', roleTag: 'body' },
-          { lineNumber: 6, code: '    return discount + codeLen;', roleTag: 'body' },
-          { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
-          {
-            lineNumber: 8,
-            code: '  catch (NullReferenceException ex) { Log(ex.Message); return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['NullReferenceException'],
-          },
-          {
-            lineNumber: 9,
-            code: '  catch (IndexOutOfRangeException ex) { Log(ex.Message); return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['IndexOutOfRangeException'],
-          },
-          {
-            lineNumber: 10,
-            code: '  catch (Exception ex) { Log(ex.Message); return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_general',
-            catchesTypes: ['Exception'],
-          },
-          { lineNumber: 11, code: '}', roleTag: 'body' },
-        ],
-        catchesExceptions: ['NullReferenceException', 'IndexOutOfRangeException', 'Exception'],
-        closesDbOnNormal: true,
-        closesDbOnReturn: true,
-        closesDbOnException: true,
-        logsErrorWithDetails: true,
-      },
-      {
-        id: 'D2',
-        codeLabel: 'З-2',
-        title: 'Exception -> NullReferenceException -> IndexOutOfRangeException',
-        shortDesc: 'Общий блок Exception сверху, узкие типы под ним',
-        targetLine: 3,
-        patchedLines: [
-          { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
-          { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 4, code: '    int codeLen = promo.Trim().Length;', roleTag: 'body' },
-          { lineNumber: 5, code: '    int discount = table[idx];', roleTag: 'body' },
-          { lineNumber: 6, code: '    return discount + codeLen;', roleTag: 'body' },
-          { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
-          {
-            lineNumber: 8,
-            code: '  catch (Exception ex) { return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_general',
-            catchesTypes: ['Exception'],
-          },
-          {
-            lineNumber: 9,
-            code: '  catch (NullReferenceException ex) { return 0; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['NullReferenceException'],
-          },
-          { lineNumber: 10, code: '}', roleTag: 'body' },
-        ],
-        compileError: {
-          code: 'CS0160',
-          message:
-            "Ошибка компиляции CS0160: Предыдущий блок catch ('Exception') уже перехватывает все исключения. Ветка на строке 9 недостижима — код даже не скомпилировался!",
-          errorLine: 9,
-        },
-        catchesExceptions: [],
-        closesDbOnNormal: true,
-        closesDbOnReturn: true,
-        closesDbOnException: false,
-        logsErrorWithDetails: false,
-      },
       {
         id: 'D3',
         codeLabel: 'З-3',
-        title: 'Только catch (NullReferenceException)',
-        shortDesc: 'Проверка только на пустую ссылку (null)',
+        title: 'Два блока: catch (FormatException) и catch (DivideByZeroException)',
+        shortDesc: 'Отдельный специализированный обработчик для каждой опасной операции',
         targetLine: 3,
         patchedLines: [
-          { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
+          { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
           { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 4, code: '    int codeLen = promo.Trim().Length;', roleTag: 'body' },
-          { lineNumber: 5, code: '    int discount = table[idx];', roleTag: 'body' },
-          { lineNumber: 6, code: '    return discount + codeLen;', roleTag: 'body' },
+          { lineNumber: 4, code: '    int tickets = int.Parse(countText);', roleTag: 'body' },
+          { lineNumber: 5, code: '    int perPerson = tickets / groupSize;', roleTag: 'body' },
+          { lineNumber: 6, code: '    return perPerson;', roleTag: 'body' },
           { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 8,
-            code: '  catch (NullReferenceException ex) { Log(ex.Message); return 0; }',
+            code: '  catch (FormatException ex) { Log(ex.Message); return 0; }',
             isAddedPatch: true,
             roleTag: 'catch_specific',
-            catchesTypes: ['NullReferenceException'],
+            catchesTypes: ['FormatException'],
           },
-          { lineNumber: 9, code: '}', roleTag: 'body' },
+          {
+            lineNumber: 9,
+            code: '  catch (DivideByZeroException ex) { Log(ex.Message); return 0; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['DivideByZeroException'],
+          },
+          { lineNumber: 10, code: '}', roleTag: 'body' },
         ],
-        catchesExceptions: ['NullReferenceException'],
+        catchesExceptions: ['FormatException', 'DivideByZeroException'],
         closesDbOnNormal: true,
         closesDbOnReturn: true,
         closesDbOnException: true,
@@ -556,27 +288,27 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D4',
         codeLabel: 'З-4',
-        title: 'Только catch (IndexOutOfRangeException)',
-        shortDesc: 'Проверка только на выход индекса за пределы массива',
+        title: 'Один блок: catch (DivideByZeroException)',
+        shortDesc: 'Обработчик ошибок целочисленного деления на ноль',
         targetLine: 4,
         patchedLines: [
-          { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
+          { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
           { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 4, code: '    int codeLen = promo.Trim().Length;', roleTag: 'body' },
-          { lineNumber: 5, code: '    int discount = table[idx];', roleTag: 'body' },
-          { lineNumber: 6, code: '    return discount + codeLen;', roleTag: 'body' },
+          { lineNumber: 4, code: '    int tickets = int.Parse(countText);', roleTag: 'body' },
+          { lineNumber: 5, code: '    int perPerson = tickets / groupSize;', roleTag: 'body' },
+          { lineNumber: 6, code: '    return perPerson;', roleTag: 'body' },
           { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 8,
-            code: '  catch (IndexOutOfRangeException ex) { Log(ex.Message); return 0; }',
+            code: '  catch (DivideByZeroException ex) { Log(ex.Message); return 0; }',
             isAddedPatch: true,
             roleTag: 'catch_specific',
-            catchesTypes: ['IndexOutOfRangeException'],
+            catchesTypes: ['DivideByZeroException'],
           },
           { lineNumber: 9, code: '}', roleTag: 'body' },
         ],
-        catchesExceptions: ['IndexOutOfRangeException'],
+        catchesExceptions: ['DivideByZeroException'],
         closesDbOnNormal: true,
         closesDbOnReturn: true,
         closesDbOnException: true,
@@ -585,113 +317,363 @@ export const ARENA_ROUNDS: RoundSpec[] = [
     ],
     rouletteQuestion: {
       prompt:
-        'В какой момент возникает ошибка CS0160, если поставить catch (Exception) выше catch (NullReferenceException)?',
+        'Если передать countText = "" и groupSize = 0 (обе ошибки сразу!), какое исключение возникнет при выполнении метода?',
       options: [
         {
-          id: 'R2_1',
-          text: 'Ещё ДО запуска программы — компилятор C# отказывается собирать проект с недостижимой веткой catch',
+          id: 'R1_1',
+          text: 'DivideByZeroException, потому что деление на ноль критичнее ошибки текста',
+          isCorrect: false,
+          explanation:
+            'Программа выполняет строки строго сверху вниз: до строки деления на ноль выполнение вообще не дойдёт.',
+        },
+        {
+          id: 'R1_2',
+          text: 'Только FormatException на строке 4 — а строка 5 с делением на ноль будет полностью пропущена',
           isCorrect: true,
           explanation:
-            'Точно! CS0160 — это ошибка этапа компиляции (Compile-time), а не исключение во время работы (Runtime).',
+            'Верно! При выбросе FormatException в int.Parse("") управление мгновенно прыгает в catch, перепрыгивая строку с делением.',
         },
         {
-          id: 'R2_2',
-          text: 'Только во время работы программы, когда прилетит пустая ссылка null',
+          id: 'R1_3',
+          text: 'Вылетят сразу оба исключения одновременно',
           isCorrect: false,
           explanation:
-            'Нет! Программа с ошибкой CS0160 даже не скомпилируется и не запустится.',
-        },
-        {
-          id: 'R2_3',
-          text: 'Никакой ошибки не будет, просто сработают оба блока catch по очереди',
-          isCorrect: false,
-          explanation:
-            'За один сбой может сработать максимум ОДИН блок catch, а недостижимый второй блок запрещён компилятором C#.',
+            'В одном потоке в конкретный момент времени выбрасывается только одно исключение — на первой упавшей инструкции.',
         },
       ],
     },
   },
 
   // ==========================================================================
-  // РАУНД 3: ЗАВИСШИЙ ЗАМОК И ГАРАНТИЯ FINALLY (200 ОЧКОВ)
+  // РАУНД 2: ПОРЯДОК БЛОКОВ CATCH (150 ОЧКОВ) — Лучшая защита: D2 (З-2), Блиц: R2_3
+  // ==========================================================================
+  {
+    number: 2,
+    title: 'Порядок блоков catch',
+    subtitle: 'Как иерархия наследования классов исключений влияет на компиляцию',
+    maxPoints: 150,
+    ruleTitle: 'Правило №2: От частного к общему (без ошибки CS0160)',
+    ruleSummary:
+      'В C# блоки catch проверяются сверху вниз. Специализированные типы должны стоять выше базового класса Exception, иначе компилятор заблокирует сборку ошибкой CS0160.',
+    engineeringNote:
+      'Все прикладные исключения в .NET наследуются от System.Exception, поэтому catch (Exception) перехватывает любой тип сбоя.',
+    methodSignature: 'int GetPromoDiscount(string? promo, int idx)',
+    baseLines: [
+      { lineNumber: 1, indent: 0, code: 'int GetPromoDiscount(string? promo, int idx)' },
+      { lineNumber: 2, indent: 0, code: '{' },
+      { lineNumber: 3, indent: 1, code: 'int[] table = { 5, 10, 25 };' },
+      {
+        lineNumber: 4,
+        indent: 1,
+        code: 'string code = promo.Trim();',
+        isClickableTarget: true,
+      },
+      {
+        lineNumber: 5,
+        indent: 1,
+        code: 'if (code.Length == 0) throw new ArgumentException();',
+        isClickableTarget: true,
+      },
+      {
+        lineNumber: 6,
+        indent: 1,
+        code: 'return table[idx];',
+        isClickableTarget: true,
+      },
+      { lineNumber: 7, indent: 0, code: '}' },
+    ],
+    attackOptions: [
+      {
+        id: 'A1',
+        codeLabel: 'А-1',
+        targetLine: 5,
+        payloadCode: 'promo = null, idx = 1',
+        expectedException: 'NullReferenceException',
+        shortDesc: 'Передать пустую ссылку null в параметр promo',
+        throwsException: 'NullReferenceException',
+        explosionLine: 4,
+        inlineValueHint: 'promo == null -> throw NullReferenceException',
+      },
+      {
+        id: 'A2',
+        codeLabel: 'А-2',
+        targetLine: 7,
+        payloadCode: 'promo = "SALE", idx = 99',
+        expectedException: 'IndexOutOfRangeException',
+        shortDesc: 'Передать индекс 99 при массиве из 3 элементов',
+        throwsException: 'IndexOutOfRangeException',
+        explosionLine: 6,
+        inlineValueHint: 'table[99] -> throw IndexOutOfRangeException',
+      },
+      {
+        id: 'A3',
+        codeLabel: 'А-3',
+        targetLine: 6,
+        payloadCode: 'promo = "   ", idx = 1',
+        expectedException: 'ArgumentException',
+        shortDesc: 'Передать строку из одних пробелов (после Trim длина станет 0)',
+        throwsException: 'ArgumentException',
+        explosionLine: 5,
+        inlineValueHint: 'code.Length == 0 -> throw ArgumentException',
+      },
+    ],
+    defenseOptions: [
+      {
+        id: 'D1',
+        codeLabel: 'З-1',
+        title: 'Exception -> NullReferenceException -> IndexOutOfRangeException',
+        shortDesc: 'Базовый блок catch (Exception) первым, узкие типы под ним',
+        targetLine: 4,
+        patchedLines: [
+          { lineNumber: 1, code: 'int GetPromoDiscount(string? promo, int idx)', roleTag: 'body' },
+          { lineNumber: 2, code: '{', roleTag: 'body' },
+          { lineNumber: 3, code: '  int[] table = { 5, 10, 25 };', roleTag: 'body' },
+          { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
+          { lineNumber: 5, code: '    string code = promo.Trim();', roleTag: 'body' },
+          { lineNumber: 6, code: '    if (code.Length == 0) throw new ArgumentException();', roleTag: 'body' },
+          { lineNumber: 7, code: '    return table[idx];', roleTag: 'body' },
+          { lineNumber: 8, code: '  }', isAddedPatch: true, roleTag: 'try' },
+          {
+            lineNumber: 9,
+            code: '  catch (Exception ex) { return 0; }',
+            isAddedPatch: true,
+            roleTag: 'catch_general',
+            catchesTypes: ['Exception'],
+          },
+          {
+            lineNumber: 10,
+            code: '  catch (NullReferenceException ex) { return -1; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['NullReferenceException'],
+          },
+          {
+            lineNumber: 11,
+            code: '  catch (IndexOutOfRangeException ex) { return -2; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['IndexOutOfRangeException'],
+          },
+          { lineNumber: 12, code: '}', roleTag: 'body' },
+        ],
+        compileError: {
+          code: 'CS0160',
+          message:
+            'Ошибка компиляции CS0160 (строка 10): предыдущий блок catch (Exception) уже перехватывает все исключения этого или производного типа!',
+          errorLine: 10,
+        },
+        catchesExceptions: [],
+        closesDbOnNormal: true,
+        closesDbOnReturn: true,
+        closesDbOnException: true,
+        logsErrorWithDetails: false,
+      },
+      {
+        id: 'D2',
+        codeLabel: 'З-2',
+        title: 'NullReferenceException -> IndexOutOfRangeException -> Exception',
+        shortDesc: 'Специализированные типы сверху, базовый Exception замыкает цепочку',
+        targetLine: 4,
+        patchedLines: [
+          { lineNumber: 1, code: 'int GetPromoDiscount(string? promo, int idx)', roleTag: 'body' },
+          { lineNumber: 2, code: '{', roleTag: 'body' },
+          { lineNumber: 3, code: '  int[] table = { 5, 10, 25 };', roleTag: 'body' },
+          { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
+          { lineNumber: 5, code: '    string code = promo.Trim();', roleTag: 'body' },
+          { lineNumber: 6, code: '    if (code.Length == 0) throw new ArgumentException();', roleTag: 'body' },
+          { lineNumber: 7, code: '    return table[idx];', roleTag: 'body' },
+          { lineNumber: 8, code: '  }', isAddedPatch: true, roleTag: 'try' },
+          {
+            lineNumber: 9,
+            code: '  catch (NullReferenceException ex) { Log(ex.Message); return -1; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['NullReferenceException'],
+          },
+          {
+            lineNumber: 10,
+            code: '  catch (IndexOutOfRangeException ex) { Log(ex.Message); return -2; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['IndexOutOfRangeException'],
+          },
+          {
+            lineNumber: 11,
+            code: '  catch (Exception ex) { Log(ex.Message); return 0; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['ArgumentException', 'Exception'],
+          },
+          { lineNumber: 12, code: '}', roleTag: 'body' },
+        ],
+        catchesExceptions: [
+          'NullReferenceException',
+          'IndexOutOfRangeException',
+          'ArgumentException',
+          'Exception',
+        ],
+        closesDbOnNormal: true,
+        closesDbOnReturn: true,
+        closesDbOnException: true,
+        logsErrorWithDetails: true,
+      },
+      {
+        id: 'D3',
+        codeLabel: 'З-3',
+        title: 'Два блока: NullReferenceException и IndexOutOfRangeException',
+        shortDesc: 'Перехват только двух частных типов без замыкающего блока Exception',
+        targetLine: 4,
+        patchedLines: [
+          { lineNumber: 1, code: 'int GetPromoDiscount(string? promo, int idx)', roleTag: 'body' },
+          { lineNumber: 2, code: '{', roleTag: 'body' },
+          { lineNumber: 3, code: '  int[] table = { 5, 10, 25 };', roleTag: 'body' },
+          { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
+          { lineNumber: 5, code: '    string code = promo.Trim();', roleTag: 'body' },
+          { lineNumber: 6, code: '    if (code.Length == 0) throw new ArgumentException();', roleTag: 'body' },
+          { lineNumber: 7, code: '    return table[idx];', roleTag: 'body' },
+          { lineNumber: 8, code: '  }', isAddedPatch: true, roleTag: 'try' },
+          {
+            lineNumber: 9,
+            code: '  catch (NullReferenceException ex) { Log(ex.Message); return -1; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['NullReferenceException'],
+          },
+          {
+            lineNumber: 10,
+            code: '  catch (IndexOutOfRangeException ex) { Log(ex.Message); return -2; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['IndexOutOfRangeException'],
+          },
+          { lineNumber: 11, code: '}', roleTag: 'body' },
+        ],
+        catchesExceptions: ['NullReferenceException', 'IndexOutOfRangeException'],
+        closesDbOnNormal: true,
+        closesDbOnReturn: true,
+        closesDbOnException: true,
+        logsErrorWithDetails: true,
+      },
+      {
+        id: 'D4',
+        codeLabel: 'З-4',
+        title: 'Только catch (NullReferenceException)',
+        shortDesc: 'Одиночный обработчик пустой ссылки на объект',
+        targetLine: 4,
+        patchedLines: [
+          { lineNumber: 1, code: 'int GetPromoDiscount(string? promo, int idx)', roleTag: 'body' },
+          { lineNumber: 2, code: '{', roleTag: 'body' },
+          { lineNumber: 3, code: '  int[] table = { 5, 10, 25 };', roleTag: 'body' },
+          { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
+          { lineNumber: 5, code: '    string code = promo.Trim();', roleTag: 'body' },
+          { lineNumber: 6, code: '    if (code.Length == 0) throw new ArgumentException();', roleTag: 'body' },
+          { lineNumber: 7, code: '    return table[idx];', roleTag: 'body' },
+          { lineNumber: 8, code: '  }', isAddedPatch: true, roleTag: 'try' },
+          {
+            lineNumber: 9,
+            code: '  catch (NullReferenceException ex) { Log(ex.Message); return -1; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['NullReferenceException'],
+          },
+          { lineNumber: 10, code: '}', roleTag: 'body' },
+        ],
+        catchesExceptions: ['NullReferenceException'],
+        closesDbOnNormal: true,
+        closesDbOnReturn: true,
+        closesDbOnException: true,
+        logsErrorWithDetails: true,
+      },
+    ],
+    rouletteQuestion: {
+      prompt:
+        'На каком этапе обнаруживается ошибка CS0160, когда catch (Exception) написан выше catch (NullReferenceException)?',
+      options: [
+        {
+          id: 'R2_1',
+          text: 'Только во время работы программы, когда в метод реально передадут null',
+          isCorrect: false,
+          explanation:
+            'Нет! Программа с ошибкой CS0160 вообще не скомпилируется и даже не запустится.',
+        },
+        {
+          id: 'R2_2',
+          text: 'Ошибки не будет — просто сработают оба блока catch по очереди',
+          isCorrect: false,
+          explanation:
+            'Для одного исключения на одном уровне try может выполниться только один блок catch.',
+        },
+        {
+          id: 'R2_3',
+          text: 'Ещё до запуска программы — компилятор C# запретит сборку из-за недостижимой ветки кода',
+          isCorrect: true,
+          explanation:
+            'Верно! Это ошибка времени компиляции (Compile-Time Error CS0160): нижний блок никогда не сможет выполниться.',
+        },
+      ],
+    },
+  },
+
+  // ==========================================================================
+  // РАУНД 3: ОСВОБОЖДЕНИЕ РЕСУРСОВ (200 ОЧКОВ) — Лучшая защита: D4 (З-4), Блиц: R3_2
+  // 3 атаки проверяют 3 разных пути выхода: ранний return, исключение, штатный return!
   // ==========================================================================
   {
     number: 3,
     title: 'Освобождение ресурсов',
-    subtitle: 'Как закрыть соединение с БД, если внутри метода есть и return, и падение',
+    subtitle: 'Как гарантировать закрытие соединения с БД при любом сценарии выхода из метода',
     maxPoints: 200,
     ruleTitle: 'Правило №3: Гарантия блока finally',
     ruleSummary:
-      'Код внутри finally { db.Close(); } выполняется ВСЕГДА: и при штатном завершении, и при раннем return из try, и после перехвата исключения.',
+      'Код внутри секции finally выполняется всегда: при нормальном завершении try, при раннем выходе через return и при выбросе любого исключения.',
     engineeringNote:
-      'Инженерный совет: для объектов с IDisposable в C# конструкция using (var db = ...) автоматически разворачивается компилятором в try / finally { db.Dispose(); }.',
+      'В C# для объектов IDisposable также используется конструкция using (var db = ...), которая при компиляции разворачивается в try / finally { db.Dispose(); }.',
     methodSignature: 'bool TransferCoins(Database db, int amount, int split)',
     baseLines: [
-      {
-        lineNumber: 1,
-        indent: 0,
-        code: 'bool TransferCoins(Database db, int amount, int split)',
-      },
-      {
-        lineNumber: 2,
-        indent: 0,
-        code: '{',
-      },
-      {
-        lineNumber: 3,
-        indent: 1,
-        code: 'db.Open(); // Открытие соединения с БД',
-      },
+      { lineNumber: 1, indent: 0, code: 'bool TransferCoins(Database db, int amount, int split)' },
+      { lineNumber: 2, indent: 0, code: '{' },
+      { lineNumber: 3, indent: 1, code: 'db.Open();' },
       {
         lineNumber: 4,
         indent: 1,
-        code: 'if (amount <= 0) return false; // Ранний выход!',
+        code: 'if (amount <= 0) return false;',
         isClickableTarget: true,
-        targetHint: 'Строка 4: ранний выход return false до закрытия БД',
       },
       {
         lineNumber: 5,
         indent: 1,
         code: 'int part = amount / split;',
         isClickableTarget: true,
-        targetHint: 'Строка 5: опасное деление amount / split',
       },
-      {
-        lineNumber: 6,
-        indent: 1,
-        code: 'db.Close();',
-      },
+      { lineNumber: 6, indent: 1, code: 'db.Close();' },
       {
         lineNumber: 7,
         indent: 1,
         code: 'return true;',
+        isClickableTarget: true,
       },
-      {
-        lineNumber: 8,
-        indent: 0,
-        code: '}',
-      },
+      { lineNumber: 8, indent: 0, code: '}' },
     ],
     attackOptions: [
       {
         id: 'A1',
         codeLabel: 'А-1',
-        targetLine: 4,
+        targetLine: 5,
         payloadCode: 'amount = -50, split = 2',
-        expectedException: 'Утечка БД при return',
-        shortDesc: 'Отрицательная сумма вызовет return false на строке 4 в обход db.Close()!',
+        expectedException: 'Ранний выход return false',
+        shortDesc: 'Отрицательная сумма вызывает срабатывание условия if (amount <= 0) return false',
         throwsException: null,
         explosionLine: null,
-        earlyReturnLine: 4,
+        earlyReturnLine: 5,
         inlineValueHint: 'amount <= 0 -> ранний return false',
       },
       {
         id: 'A2',
         codeLabel: 'А-2',
-        targetLine: 5,
+        targetLine: 6,
         payloadCode: 'amount = 100, split = 0',
         expectedException: 'DivideByZeroException',
-        shortDesc: 'Деление на split = 0 взорвёт строку 5 и перепрыгнет db.Close()!',
+        shortDesc: 'Положительная сумма, но делитель split = 0 на строке деления',
         throwsException: 'DivideByZeroException',
         explosionLine: 5,
         inlineValueHint: '100 / 0 -> throw DivideByZeroException',
@@ -699,62 +681,27 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'A3',
         codeLabel: 'А-3',
-        targetLine: 5,
-        payloadCode: 'amount = 500, split = 0',
-        expectedException: 'DivideByZeroException',
-        shortDesc: 'Проверяет одновременно перехват деления на 0 и закрытие БД в finally',
-        throwsException: 'DivideByZeroException',
-        explosionLine: 5,
-        inlineValueHint: '500 / 0 -> проверка блока finally',
+        targetLine: 7,
+        payloadCode: 'amount = 100, split = 2',
+        expectedException: 'Штатный выход return true',
+        shortDesc: 'Корректные числа: метод проходит без ошибок до return true',
+        throwsException: null,
+        explosionLine: null,
+        normalReturnLine: 7,
+        inlineValueHint: '100 / 2 = 50 -> штатный return true',
       },
     ],
     defenseOptions: [
       {
         id: 'D1',
         codeLabel: 'З-1',
-        title: 'Блок try-catch + секция finally { db.Close(); }',
-        shortDesc: 'Вызов db.Close() вынесен в отдельный блок finally',
-        targetLine: 4,
-        patchedLines: [
-          { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
-          { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
-          { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
-          { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
-          { lineNumber: 7, code: '    return true;', roleTag: 'body' },
-          { lineNumber: 8, code: '  }', isAddedPatch: true, roleTag: 'try' },
-          {
-            lineNumber: 9,
-            code: '  catch (DivideByZeroException ex) { Log(ex.Message); return false; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['DivideByZeroException'],
-          },
-          {
-            lineNumber: 10,
-            code: '  finally { db.Close(); }',
-            isAddedPatch: true,
-            roleTag: 'finally',
-          },
-          { lineNumber: 11, code: '}', roleTag: 'body' },
-        ],
-        catchesExceptions: ['DivideByZeroException'],
-        closesDbOnNormal: true,
-        closesDbOnReturn: true,
-        closesDbOnException: true,
-        logsErrorWithDetails: true,
-      },
-      {
-        id: 'D2',
-        codeLabel: 'З-2',
         title: 'Вызов db.Close() внутри блока try (перед return true)',
         shortDesc: 'Закрытие соединения в последней строке блока try',
         targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open();', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
@@ -777,15 +724,45 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         logsErrorWithDetails: true,
       },
       {
+        id: 'D2',
+        codeLabel: 'З-2',
+        title: 'Вызов db.Close() внутри блока catch',
+        shortDesc: 'Закрытие соединения при входе в блок обработки исключения',
+        targetLine: 5,
+        patchedLines: [
+          { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
+          { lineNumber: 2, code: '{', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open();', roleTag: 'body' },
+          { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
+          { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
+          { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
+          { lineNumber: 7, code: '    return true;', roleTag: 'body' },
+          { lineNumber: 8, code: '  }', isAddedPatch: true, roleTag: 'try' },
+          {
+            lineNumber: 9,
+            code: '  catch (DivideByZeroException ex) { db.Close(); return false; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['DivideByZeroException'],
+          },
+          { lineNumber: 10, code: '}', roleTag: 'body' },
+        ],
+        catchesExceptions: ['DivideByZeroException'],
+        closesDbOnNormal: false,
+        closesDbOnReturn: false,
+        closesDbOnException: true,
+        logsErrorWithDetails: false,
+      },
+      {
         id: 'D3',
         codeLabel: 'З-3',
         title: 'Вызов db.Close() после блока try-catch (в конце метода)',
-        shortDesc: 'Закрытие соединения обычной строкой после try-catch',
+        shortDesc: 'Закрытие соединения обычной строкой после конструкции try-catch',
         targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open();', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
@@ -815,13 +792,13 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D4',
         codeLabel: 'З-4',
-        title: 'Вызов db.Close() внутри блока catch',
-        shortDesc: 'Закрытие соединения только при перехвате ошибки',
-        targetLine: 5,
+        title: 'Блок try-catch + секция finally { db.Close(); }',
+        shortDesc: 'Вызов db.Close() вынесен в отдельный блок finally',
+        targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
+          { lineNumber: 3, code: '  db.Open();', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
@@ -829,163 +806,120 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 8, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 9,
-            code: '  catch (DivideByZeroException ex) { db.Close(); return false; }',
+            code: '  catch (DivideByZeroException ex) { Log(ex.Message); return false; }',
             isAddedPatch: true,
             roleTag: 'catch_specific',
             catchesTypes: ['DivideByZeroException'],
           },
-          { lineNumber: 10, code: '}', roleTag: 'body' },
+          {
+            lineNumber: 10,
+            code: '  finally { db.Close(); }',
+            isAddedPatch: true,
+            roleTag: 'finally',
+          },
+          { lineNumber: 11, code: '}', roleTag: 'body' },
         ],
         catchesExceptions: ['DivideByZeroException'],
-        closesDbOnNormal: false,
-        closesDbOnReturn: false,
+        closesDbOnNormal: true,
+        closesDbOnReturn: true,
         closesDbOnException: true,
-        logsErrorWithDetails: false,
+        logsErrorWithDetails: true,
       },
     ],
     rouletteQuestion: {
       prompt:
-        'Чем код внутри блока finally { db.Close(); } отличается от обычной строчки db.Close(), написанной просто после блока try-catch?',
+        'Чем код внутри блока finally { db.Close(); } отличается от обычной строчки db.Close(), написанной сразу после блока try-catch?',
       options: [
         {
           id: 'R3_1',
-          text: 'Блок finally выполнится ДАЖЕ если внутри try сработал ранний return или вылетело непойманное исключение',
-          isCorrect: true,
+          text: 'Блок finally работает только при возникновении ошибки, а при обычной работе пропускается',
+          isCorrect: false,
           explanation:
-            'Абсолютно верно! Команда return внутри try перепрыгивает весь код после try-catch, но обойти блок finally она не может.',
+            'Наоборот: finally выполняется абсолютно всегда — и при ошибках, и при штатной работе.',
         },
         {
           id: 'R3_2',
-          text: 'Ничем не отличается — это просто красивое ключевое слово для читаемости кода',
-          isCorrect: false,
+          text: 'Если внутри try сработает ранний return, строчка после try-catch будет пропущена, а блок finally всё равно выполнится перед выходом',
+          isCorrect: true,
           explanation:
-            'Отличается кардинально! При return из try код после try-catch вообще не запустится, а finally запустится гарантированно.',
+            'Верно! CLR гарантирует заход в блок finally даже тогда, когда внутри try или catch вызван return.',
         },
         {
           id: 'R3_3',
-          text: 'Блок finally запускается только тогда, когда произошла ошибка',
+          text: 'Ничем не отличается — это просто более красивая запись для читаемости',
           isCorrect: false,
           explanation:
-            'Только при ошибке запускается catch, а finally запускается ВСЕГДА (и с ошибкой, и без неё).',
+            'Обычная строка после try-catch не выполнится при любом return внутри try или при необработанном исключении.',
         },
       ],
     },
   },
 
   // ==========================================================================
-  // РАУНД 4: СЛЕПАЯ ЗОНА — ПУСТОЙ CATCH И THROW; VS THROW EX; (300 ОЧКОВ)
+  // РАУНД 4: ЖУРНАЛ ОШИБОК И THROW; VS THROW EX; (300 ОЧКОВ) — Лучшая защита: D2 (З-2), Блиц: R4_3
   // ==========================================================================
   {
     number: 4,
     title: 'Журнал ошибок и проброс throw',
-    subtitle: 'Почему пустой catch {} опаснее падения, а throw ex; уничтожает улики',
+    subtitle: 'Как залогировать сбой в внутреннем методе и передать его выше, не потеряв строку ошибки',
     maxPoints: 300,
-    ruleTitle: 'Правило №4: Запиши ex.Message и сохрани стек через throw;',
+    ruleTitle: 'Правило №4: Запрет пустого catch и сохранение стека через throw;',
     ruleSummary:
-      'Никогда не оставляйте пустой catch { } (ошибка пропадает без следа). Для повторного проброса ошибки используйте чистый throw; — конструкция throw ex; затирает исходный номер строки в StackTrace!',
+      'Никогда не оставляйте catch пустым. Фиксируйте ex.Message в логе, а для проброса исключения выше используйте только чистый throw; (инструкция throw ex; затирает номер исходной строки в StackTrace).',
     engineeringNote:
-      'Инженерный совет: анализатор кода .NET выдаёт предупреждение CA2200 на каждую инструкцию throw ex;, требуя заменять её на throw;.',
+      'Анализатор кода Roslyn помечает конструкцию throw ex; предупреждением CA2200 (Rethrow to preserve stack details).',
     methodSignature: 'int AuthorizeCard(string pinInput, AuditLog log)',
     baseLines: [
-      {
-        lineNumber: 1,
-        indent: 0,
-        code: 'int AuthorizeCard(string pinInput, AuditLog log)',
-      },
-      {
-        lineNumber: 2,
-        indent: 0,
-        code: '{',
-      },
+      { lineNumber: 1, indent: 0, code: 'int AuthorizeCard(string pinInput, AuditLog log)' },
+      { lineNumber: 2, indent: 0, code: '{' },
       {
         lineNumber: 3,
         indent: 1,
-        code: 'int pin = int.Parse(pinInput); // Стр. 3: точка сбоя',
+        code: 'int pin = int.Parse(pinInput);',
         isClickableTarget: true,
-        targetHint: 'Строка 3: парсинг PIN-кода карты (исходная точка стека)',
       },
-      {
-        lineNumber: 4,
-        indent: 1,
-        code: 'return VerifyPinHash(pin);',
-        isClickableTarget: true,
-        targetHint: 'Строка 4: проверка хеша PIN-кода',
-      },
-      {
-        lineNumber: 5,
-        indent: 0,
-        code: '}',
-      },
+      { lineNumber: 4, indent: 1, code: 'return VerifyPinHash(pin);' },
+      { lineNumber: 5, indent: 0, code: '}' },
     ],
     attackOptions: [
       {
         id: 'A1',
         codeLabel: 'А-1',
-        targetLine: 3,
+        targetLine: 4,
         payloadCode: 'pinInput = "HACK_77"',
         expectedException: 'FormatException',
-        shortDesc: 'Проверяет, записан ли сбой в AuditLog и сохранился ли адрес строки в стеке',
+        shortDesc: 'Буквы вместо цифр в ПИН-коде',
         throwsException: 'FormatException',
         explosionLine: 3,
-        inlineValueHint: 'pinInput = "HACK_77" -> throw FormatException',
+        inlineValueHint: 'int.Parse("HACK_77") -> throw FormatException (строка 4)',
       },
       {
         id: 'A2',
         codeLabel: 'А-2',
-        targetLine: 3,
+        targetLine: 4,
         payloadCode: 'pinInput = ""',
         expectedException: 'FormatException',
-        shortDesc: 'Пустой ввод: если у Защиты пустой catch {}, атака пройдёт незамеченной!',
+        shortDesc: 'Пустая строка вместо ПИН-кода',
         throwsException: 'FormatException',
         explosionLine: 3,
-        inlineValueHint: 'pinInput = "" -> throw FormatException',
+        inlineValueHint: 'int.Parse("") -> throw FormatException (строка 4)',
       },
       {
         id: 'A3',
         codeLabel: 'А-3',
-        targetLine: 3,
+        targetLine: 4,
         payloadCode: 'pinInput = "999999999999999"',
         expectedException: 'OverflowException',
-        shortDesc: 'Слишком большое число для int вызывает OverflowException на строке 3',
+        shortDesc: 'Число из 15 девяток, превышающее размер типа int',
         throwsException: 'OverflowException',
         explosionLine: 3,
-        inlineValueHint: 'pinInput = "999999999999999" -> throw OverflowException',
+        inlineValueHint: 'int.Parse("999999999999999") -> throw OverflowException (строка 4)',
       },
     ],
     defenseOptions: [
       {
         id: 'D1',
         codeLabel: 'З-1',
-        title: 'catch (Exception ex) { log.Write(ex.Message); throw; }',
-        shortDesc: 'Запись сообщения в лог и проброс инструкцией throw;',
-        targetLine: 3,
-        patchedLines: [
-          { lineNumber: 1, code: 'int AuthorizeCard(string pinInput, AuditLog log)', roleTag: 'body' },
-          { lineNumber: 2, code: '{', roleTag: 'body' },
-          { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 4, code: '    int pin = int.Parse(pinInput); // Исходная строка #4', roleTag: 'body' },
-          { lineNumber: 5, code: '    return VerifyPinHash(pin);', roleTag: 'body' },
-          { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
-          {
-            lineNumber: 7,
-            code: '  catch (Exception ex) { log.Write(ex.Message); throw; }',
-            isAddedPatch: true,
-            roleTag: 'catch_specific',
-            catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
-          },
-          { lineNumber: 8, code: '}', roleTag: 'body' },
-        ],
-        catchesExceptions: ['FormatException', 'OverflowException', 'Exception'],
-        closesDbOnNormal: true,
-        closesDbOnReturn: true,
-        closesDbOnException: true,
-        logsErrorWithDetails: true,
-        swallowsErrorSilently: false,
-        resetsStackTrace: false,
-      },
-      {
-        id: 'D2',
-        codeLabel: 'З-2',
         title: 'catch (Exception ex) { log.Write(ex.Message); throw ex; }',
         shortDesc: 'Запись сообщения в лог и повторный выброс переменной throw ex;',
         targetLine: 3,
@@ -1014,10 +948,40 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         resetsStackTrace: true,
       },
       {
+        id: 'D2',
+        codeLabel: 'З-2',
+        title: 'catch (Exception ex) { log.Write(ex.Message); throw; }',
+        shortDesc: 'Запись сообщения в лог и проброс инструкцией throw;',
+        targetLine: 3,
+        patchedLines: [
+          { lineNumber: 1, code: 'int AuthorizeCard(string pinInput, AuditLog log)', roleTag: 'body' },
+          { lineNumber: 2, code: '{', roleTag: 'body' },
+          { lineNumber: 3, code: '  try {', isAddedPatch: true, roleTag: 'try' },
+          { lineNumber: 4, code: '    int pin = int.Parse(pinInput);', roleTag: 'body' },
+          { lineNumber: 5, code: '    return VerifyPinHash(pin);', roleTag: 'body' },
+          { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
+          {
+            lineNumber: 7,
+            code: '  catch (Exception ex) { log.Write(ex.Message); throw; }',
+            isAddedPatch: true,
+            roleTag: 'catch_specific',
+            catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
+          },
+          { lineNumber: 8, code: '}', roleTag: 'body' },
+        ],
+        catchesExceptions: ['FormatException', 'OverflowException', 'Exception'],
+        closesDbOnNormal: true,
+        closesDbOnReturn: true,
+        closesDbOnException: true,
+        logsErrorWithDetails: true,
+        swallowsErrorSilently: false,
+        resetsStackTrace: false,
+      },
+      {
         id: 'D3',
         codeLabel: 'З-3',
         title: 'catch { return 0; }',
-        shortDesc: 'Перехват без параметров и возврат значения по умолчанию',
+        shortDesc: 'Перехват без параметров и возврат значения 0',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int AuthorizeCard(string pinInput, AuditLog log)', roleTag: 'body' },
@@ -1080,24 +1044,24 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       options: [
         {
           id: 'R4_1',
-          text: 'throw; сохраняет исходный номер строки, где родилась ошибка, а throw ex; перезаписывает StackTrace текущей строкой',
-          isCorrect: true,
-          explanation:
-            'Именно так! Из-за throw ex; разработчик в логах видит только номер строки самого блока catch, а настоящая причина сбоя теряется.',
-        },
-        {
-          id: 'R4_2',
           text: 'throw ex; работает быстрее, а пустой throw; просто игнорирует ошибку',
           isCorrect: false,
           explanation:
             'Наоборот: оба пробрасывают исключение дальше, но throw ex; уничтожает историю вызовов (StackTrace).',
         },
         {
-          id: 'R4_3',
+          id: 'R4_2',
           text: 'Между ними нет никакой разницы в компиляторе C#',
           isCorrect: false,
           explanation:
-            'В IL-коде это две совершенно разные инструкции: rethrow (сохраняет стек) и throw (создаёт новую точку отсчёта стека).',
+            'В IL-коде это две разные инструкции: rethrow (сохраняет стек) и throw (создаёт новую точку отсчёта стека со строки catch).',
+        },
+        {
+          id: 'R4_3',
+          text: 'throw; сохраняет исходный номер строки (line 4), где родилась ошибка, а throw ex; затирает его строкой самого блока catch (line 7)',
+          isCorrect: true,
+          explanation:
+            'Верно! При throw ex; внешний обработчик увидит в StackTrace только строку 7 (блок catch), а настоящая точка сбоя на строке 4 пропадёт.',
         },
       ],
     },
@@ -1122,7 +1086,7 @@ export function simulateClash(
   const steps: TraceStep[] = [];
   const halfPool = Math.round(round.maxPoints / 2);
 
-  // 1. Проверка ошибки этапа компиляции (например, CS0160 в Раунде 2)
+  // 1. Проверка ошибки компиляции (CS0160 в Раунде 2)
   if (defense.compileError) {
     steps.push({
       stepIndex: 1,
@@ -1149,7 +1113,6 @@ export function simulateClash(
     };
   }
 
-  // Начальное состояние датчиков
   const initialDb: 'CLOSED' | 'OPEN' = round.number === 3 ? 'OPEN' : 'CLOSED';
 
   // Шаг 1: Вход в блок try
@@ -1159,18 +1122,20 @@ export function simulateClash(
     stepIndex: 1,
     activeLineNumber: tryLine,
     skippedLineNumbers: [],
-    inlineBadge: `▶ Вход в зону try (${attack.payloadCode})`,
-    statusBanner: `Шаг 1: Программа входит в защитную зону try со снарядом «${attack.payloadCode}»`,
+    inlineBadge: `Вход в try (${attack.payloadCode})`,
+    statusBanner: `Шаг 1: Выполнение входит в блок try с аргументами (${attack.payloadCode}).`,
     stepKind: 'normal',
     dbState: initialDb,
     logState: 'EMPTY',
     stackState: 'INTACT',
   });
 
-  // Сценарий А: Ранний выход return (Раунд 3, снаряд A1)
+  // Сценарий А: Ранний выход return (Раунд 3, А-1: amount = -50)
   if (attack.earlyReturnLine) {
-    const returnPatchedLine = 5; // строка с if (amount <= 0) return false;
-    const skippedInTry = [6, 7];
+    const returnPatchedLine = 5;
+    const skippedInTry = defense.patchedLines
+      .filter((l) => l.roleTag === 'body' && l.lineNumber > 5 && l.lineNumber <= 8)
+      .map((l) => l.lineNumber);
 
     steps.push({
       stepIndex: 2,
@@ -1178,7 +1143,7 @@ export function simulateClash(
       skippedLineNumbers: skippedInTry,
       inlineBadge: attack.inlineValueHint,
       statusBanner:
-        'Шаг 2: Сработал ранний выход return false! Строки ниже внутри try пропускаются.',
+        'Шаг 2: Условие amount <= 0 истинно — срабатывает ранний выход return false! Строки ниже внутри try пропускаются.',
       stepKind: 'normal',
       dbState: initialDb,
       logState: 'EMPTY',
@@ -1195,7 +1160,7 @@ export function simulateClash(
         skippedLineNumbers: skippedInTry,
         inlineBadge: '[FINALLY] db.Close() выполнен',
         statusBanner:
-          'Шаг 3: Даже при раннем return управление заходит в блок finally и закрывает БД!',
+          'Шаг 3: Перед выходом из метода по return гарантированно выполняется блок finally и закрывает соединение с БД.',
         stepKind: 'finally',
         dbState: 'CLOSED',
         logState: 'EMPTY',
@@ -1206,7 +1171,7 @@ export function simulateClash(
         outcome: 'REPELLED',
         headline: 'ЗАЩИТА УСТОЯЛА: блок finally закрыл БД при раннем return',
         reasonDetailed:
-          'Ранний return перепрыгнул конец блока try, но блок finally сработал гарантированно и предотвратил утечку соединения.',
+          'Ранний return перепрыгнул конец блока try, но секция finally отработала перед выходом из метода и закрыла соединение.',
         attackPointsEarned: 0,
         defensePointsEarned: halfPool,
         steps,
@@ -1221,10 +1186,10 @@ export function simulateClash(
       steps.push({
         stepIndex: 3,
         activeLineNumber: leakLine,
-        skippedLineNumbers: [leakLine],
-        inlineBadge: '[LEAK] Вызов db.Close() пропущен',
+        skippedLineNumbers: [...skippedInTry, leakLine],
+        inlineBadge: '[LEAK] Вызов db.Close() не выполнен',
         statusBanner:
-          'Шаг 3: Выход из метода произошёл мимо db.Close()! Соединение с базой данных осталось висеть открытым.',
+          'Шаг 3: Метод завершился по return false в обход строки db.Close()! Соединение с базой данных осталось открытым.',
         stepKind: 'leak',
         dbState: 'LEAK',
         logState: 'EMPTY',
@@ -1233,9 +1198,9 @@ export function simulateClash(
 
       return {
         outcome: 'BREACHED',
-        headline: 'ПРОБИТИЕ ЗАЩИТЫ: утечка открытого соединения с БД',
+        headline: 'ПРОБИТИЕ ЗАЩИТЫ: утечка открытого соединения с БД при раннем return',
         reasonDetailed:
-          'Без блока finally ранний выход return false покинул метод до вызова db.Close(). Соединение с базой данных утекло!',
+          'Без блока finally ранний выход return false покинул метод, так и не вызвав db.Close(). Соединение с БД зависло в памяти!',
         attackPointsEarned: halfPool,
         defensePointsEarned: 0,
         steps,
@@ -1246,16 +1211,64 @@ export function simulateClash(
     }
   }
 
-  // Сценарий Б: Холостой снаряд без исключения (например, A3 в Раунде 1)
+  // Сценарий Б: Штатное прохождение без исключений (Раунд 3, А-3: amount = 100, split = 2)
   if (!attack.throwsException) {
     steps.push({
       stepIndex: 2,
-      activeLineNumber: 5,
+      activeLineNumber: 6,
       skippedLineNumbers: [],
       inlineBadge: attack.inlineValueHint,
       statusBanner:
-        'Шаг 2: Входные данные корректны — метод штатно выполнил все строки без выброса исключений.',
-      stepKind: 'done',
+        'Шаг 2: Деление 100 / 2 = 50 прошло без ошибок, исключений не возникло.',
+      stepKind: 'normal',
+      dbState: initialDb,
+      logState: 'EMPTY',
+      stackState: 'INTACT',
+    });
+
+    if (round.number === 3 && !defense.closesDbOnNormal) {
+      // Ловит ошибку З-2, где db.Close() написали ТОЛЬКО внутри catch!
+      const catchLine =
+        defense.patchedLines.find((l) => l.roleTag === 'catch_specific')
+          ?.lineNumber || 9;
+      steps.push({
+        stepIndex: 3,
+        activeLineNumber: catchLine,
+        skippedLineNumbers: [catchLine],
+        inlineBadge: '[LEAK] Блок catch пропущен -> БД не закрыта!',
+        statusBanner:
+          'Шаг 3: Ошибки не было, поэтому программа НЕ зашла в catch, где лежал единственный вызов db.Close()! Соединение утекло.',
+        stepKind: 'leak',
+        dbState: 'LEAK',
+        logState: 'EMPTY',
+        stackState: 'INTACT',
+      });
+
+      return {
+        outcome: 'BREACHED',
+        headline: 'ПРОБИТИЕ ЗАЩИТЫ: db.Close() спрятан в catch и не сработал без ошибки!',
+        reasonDetailed:
+          'Поскольку вызов db.Close() поместили только внутрь catch, при обычной работе без ошибок он вообще не вызывается, и база данных остаётся открытой!',
+        attackPointsEarned: halfPool,
+        defensePointsEarned: 0,
+        steps,
+        finalDbState: 'LEAK',
+        finalLogState: 'EMPTY',
+        finalStackState: 'INTACT',
+      };
+    }
+
+    const closeLine =
+      defense.patchedLines.find((l) => l.code.includes('db.Close'))
+        ?.lineNumber || 7;
+    steps.push({
+      stepIndex: 3,
+      activeLineNumber: closeLine,
+      skippedLineNumbers: [],
+      inlineBadge: 'db.Close() выполнен -> return true',
+      statusBanner:
+        'Шаг 3: Соединение с базой данных успешно закрыто перед завершением метода.',
+      stepKind: 'finally',
       dbState: 'CLOSED',
       logState: 'EMPTY',
       stackState: 'INTACT',
@@ -1263,9 +1276,9 @@ export function simulateClash(
 
     return {
       outcome: 'REPELLED',
-      headline: 'ШТАТНОЕ ВЫПОЛНЕНИЕ: входные данные не вызвали сбоя',
+      headline: 'ЗАЩИТА УСТОЯЛА: метод завершился штатно, соединение закрыто',
       reasonDetailed:
-        'Атака выбрала безопасные входные данные, которые не вызывают исключения. Защита сохраняет очки!',
+        'При штатном прохождении без ошибок вызов db.Close() отработал корректно.',
       attackPointsEarned: 0,
       defensePointsEarned: halfPool,
       steps,
@@ -1275,11 +1288,21 @@ export function simulateClash(
     };
   }
 
-  // Сценарий В: Выброс реального исключения
+  // Сценарий В: Выброс исключения
   const patchedExplosionLine = (attack.explosionLine || 3) + 1;
+  const tryEndLine =
+    defense.patchedLines
+      .filter((l) => l.roleTag === 'try')
+      .map((l) => l.lineNumber)
+      .pop() || 7;
+
   const skippedLinesInTry: number[] = [];
   defense.patchedLines.forEach((l) => {
-    if (l.roleTag === 'body' && l.lineNumber > patchedExplosionLine && l.lineNumber <= 7) {
+    if (
+      l.roleTag === 'body' &&
+      l.lineNumber > patchedExplosionLine &&
+      l.lineNumber < tryEndLine
+    ) {
       skippedLinesInTry.push(l.lineNumber);
     }
   });
@@ -1289,7 +1312,7 @@ export function simulateClash(
     activeLineNumber: patchedExplosionLine,
     skippedLineNumbers: skippedLinesInTry,
     inlineBadge: attack.inlineValueHint,
-    statusBanner: `Шаг 2: На строке ${patchedExplosionLine} выброшено исключение ${attack.throwsException}! Строки ниже внутри try пропускаются.`,
+    statusBanner: `Шаг 2: На строке ${patchedExplosionLine} выброшено исключение ${attack.throwsException}! Остаток блока try пропускается.`,
     stepKind: 'explode',
     dbState: initialDb,
     logState: 'EMPTY',
@@ -1312,10 +1335,11 @@ export function simulateClash(
       stepIndex: 3,
       activeLineNumber: defense.patchedLines.length,
       skippedLineNumbers: skippedLinesInTry,
-      inlineBadge: `[UNHANDLED] ${attack.throwsException}!`,
-      statusBanner: `Шаг 3: В щите нет обработчика для типа ${attack.throwsException} — программа аварийно рухнула!`,
+      inlineBadge: `[UNHANDLED] ${attack.throwsException}`,
+      statusBanner: `Шаг 3: В методе нет обработчика catch для типа ${attack.throwsException} — выполнение аварийно прервано!`,
       stepKind: 'explode',
-      dbState: round.number === 3 && !defense.closesDbOnException ? 'LEAK' : 'CLOSED',
+      dbState:
+        round.number === 3 && !defense.closesDbOnException ? 'LEAK' : 'CLOSED',
       logState: 'EMPTY',
       stackState: 'INTACT',
     });
@@ -1323,17 +1347,18 @@ export function simulateClash(
     return {
       outcome: 'BREACHED',
       headline: `ПРОБИТИЕ ЗАЩИТЫ: необработанное исключение ${attack.throwsException}`,
-      reasonDetailed: `Атака ударила типом ${attack.throwsException}, а в щите Защиты не оказалось подходящего блока catch.`,
+      reasonDetailed: `Атака вызвала ${attack.throwsException}, для которого в коде Защиты не нашлось подходящего блока catch.`,
       attackPointsEarned: halfPool,
       defensePointsEarned: 0,
       steps,
-      finalDbState: round.number === 3 && !defense.closesDbOnException ? 'LEAK' : 'CLOSED',
+      finalDbState:
+        round.number === 3 && !defense.closesDbOnException ? 'LEAK' : 'CLOSED',
       finalLogState: 'EMPTY',
       finalStackState: 'INTACT',
     };
   }
 
-  // Исключение перехвачено блоком catch: проверяем качество обработки (Раунд 1 слепой catch, Раунд 3 finally, Раунд 4 лог и стек)
+  // Исключение перехвачено блоком catch
   const logStateAfterCatch: 'EMPTY' | 'LOGGED' | 'SWALLOWED' =
     defense.swallowsErrorSilently
       ? 'SWALLOWED'
@@ -1352,20 +1377,31 @@ export function simulateClash(
     inlineBadge: defense.swallowsErrorSilently
       ? '[SILENT CATCH] Ошибка скрыта от лога'
       : defense.resetsStackTrace
-      ? '[CA2200] throw ex перезаписал StackTrace'
-      : `[CATCH] Перехвачено исключение (${attack.throwsException})`,
-    statusBanner: `Шаг 3: Управление прыгнуло в блок catch на строке ${matchingCatchLine}.`,
+      ? '[CA2200] throw ex затёр строку #4 на строку #7'
+      : round.number === 4
+      ? `[CATCH + THROW;] Лог записан, строка #4 сохранена в StackTrace`
+      : `[CATCH] Перехвачено исключение ${attack.throwsException}`,
+    statusBanner:
+      round.number === 4 && !defense.swallowsErrorSilently
+        ? defense.resetsStackTrace
+          ? `Шаг 3: Блок catch на строке ${matchingCatchLine} записал лог, но инструкция throw ex; перезаписала StackTrace строкой #${matchingCatchLine} вместо исходной строки #4!`
+          : `Шаг 3: Блок catch на строке ${matchingCatchLine} записал ex.Message в лог и через чистый throw; передал исключение выше с сохранённой строкой #4 в StackTrace.`
+        : `Шаг 3: Управление перешло в блок catch на строке ${matchingCatchLine}.`,
     stepKind: 'catch',
     dbState: initialDb,
     logState: logStateAfterCatch,
     stackState: stackStateAfterCatch,
   });
 
-  // Если это Раунд 3 — проверяем закрытие БД в finally
+  // Если это Раунд 3 — проверяем закрытие БД
   if (round.number === 3) {
     const finallyLineObj = defense.patchedLines.find(
       (l) => l.roleTag === 'finally'
     );
+    const afterCloseLineObj = defense.patchedLines.find(
+      (l) => l.roleTag === 'after'
+    );
+
     if (finallyLineObj && defense.closesDbOnException) {
       steps.push({
         stepIndex: 4,
@@ -1373,20 +1409,64 @@ export function simulateClash(
         skippedLineNumbers: skippedLinesInTry,
         inlineBadge: '[FINALLY] db.Close() закрыл соединение',
         statusBanner:
-          'Шаг 4: После блока catch гарантированно сработал блок finally и закрыл соединение с БД.',
+          'Шаг 4: После блока catch гарантированно выполнился блок finally и закрыл соединение с БД.',
         stepKind: 'finally',
         dbState: 'CLOSED',
         logState: logStateAfterCatch,
         stackState: stackStateAfterCatch,
       });
-    } else if (!defense.closesDbOnException) {
+    } else if (afterCloseLineObj && defense.closesDbOnException) {
       steps.push({
         stepIndex: 4,
-        activeLineNumber: defense.patchedLines.length,
+        activeLineNumber: afterCloseLineObj.lineNumber,
         skippedLineNumbers: skippedLinesInTry,
-        inlineBadge: '[LEAK] Соединение с БД осталось открытым',
+        inlineBadge: 'db.Close() после catch (но уязвим к раннему return!)',
         statusBanner:
-          'Шаг 4: Исключение поймали, но db.Close() остался в пропущенной части try! Соединение утекло.',
+          'Шаг 4: Так как внутри catch не было return, выполнение дошло до db.Close() на строке 9. Но при раннем return (А-1) эта защита дала бы утечку!',
+        stepKind: 'finally',
+        dbState: 'CLOSED',
+        logState: logStateAfterCatch,
+        stackState: stackStateAfterCatch,
+      });
+
+      const partialPts = Math.round(halfPool / 2);
+      return {
+        outcome: 'PARTIAL',
+        headline:
+          'ЧАСТИЧНАЯ ЗАЩИТА: db.Close() после try-catch сработал, но не защищён от раннего return',
+        reasonDetailed:
+          'При делении на ноль код дошёл до строки db.Close() после catch, однако без секции finally любой ранний return внутри try оставит базу данных открытой.',
+        attackPointsEarned: halfPool - partialPts,
+        defensePointsEarned: partialPts,
+        steps,
+        finalDbState: 'CLOSED',
+        finalLogState: logStateAfterCatch,
+        finalStackState: stackStateAfterCatch,
+      };
+    } else if (!finallyLineObj && defense.closesDbOnException) {
+      // Это вариант D2 (db.Close внутри самого catch)
+      const partialPts = Math.round(halfPool / 2);
+      return {
+        outcome: 'PARTIAL',
+        headline:
+          'ЧАСТИЧНАЯ ЗАЩИТА: db.Close() внутри catch закрыл БД только потому, что произошла ошибка',
+        reasonDetailed:
+          'Вызов db.Close() внутри catch сработал при делении на ноль, но при обычной работе без ошибок (А-3) или раннем return (А-1) база данных останется открытой!',
+        attackPointsEarned: halfPool - partialPts,
+        defensePointsEarned: partialPts,
+        steps,
+        finalDbState: 'CLOSED',
+        finalLogState: logStateAfterCatch,
+        finalStackState: stackStateAfterCatch,
+      };
+    } else {
+      steps.push({
+        stepIndex: 4,
+        activeLineNumber: 7,
+        skippedLineNumbers: skippedLinesInTry,
+        inlineBadge: '[LEAK] Строка db.Close() в try была пропущена!',
+        statusBanner:
+          'Шаг 4: Исключение поймали, но вызов db.Close() остался на пропущенной строке 7 внутри try! Соединение утекло.',
         stepKind: 'leak',
         dbState: 'LEAK',
         logState: logStateAfterCatch,
@@ -1397,7 +1477,7 @@ export function simulateClash(
         outcome: 'BREACHED',
         headline: 'ПРОБИТИЕ ЗАЩИТЫ: исключение перехвачено, но соединение с БД утекло',
         reasonDetailed:
-          'Вызов db.Close() находился внутри try после опасной строки и был пропущен при прыжке в catch. Без finally база данных осталась висеть открытой!',
+          'Вызов db.Close() находился внутри блока try после строки деления и был пропущен при переходе в catch. Без finally соединение осталось открытым!',
         attackPointsEarned: halfPool,
         defensePointsEarned: 0,
         steps,
@@ -1414,7 +1494,7 @@ export function simulateClash(
       outcome: 'BREACHED',
       headline: 'ПРОБИТИЕ ЗАЩИТЫ: пустой блок catch {} скрыл сбой от журнала',
       reasonDetailed:
-        'Защита поставила пустой блок catch: программа промолчала, в AuditLog не попало ни одной записи, и атака осталась незамеченной!',
+        'Защита поставила пустой блок catch: программа вернула 0, но в журнал безопасности AuditLog не попало ни одной записи о попытке взлома!',
       attackPointsEarned: halfPool,
       defensePointsEarned: 0,
       steps,
@@ -1429,7 +1509,7 @@ export function simulateClash(
       outcome: 'BREACHED',
       headline: 'ПРОБИТИЕ ЗАЩИТЫ (CA2200): инструкция throw ex; стёрла стек вызовов',
       reasonDetailed:
-        'Защита написала throw ex; вместо чистого throw;. Из-за этого исходный номер строки падения в StackTrace был перезаписан!',
+        'Защита написала throw ex; вместо чистого throw;. Из-за этого исходный номер строки сбоя (строка 4) в StackTrace был перезаписан строкой блока catch (строка 7)!',
       attackPointsEarned: halfPool,
       defensePointsEarned: 0,
       steps,
@@ -1446,7 +1526,7 @@ export function simulateClash(
       outcome: 'PARTIAL',
       headline: 'ЧАСТИЧНЫЙ ПЕРЕХВАТ: общий catch (Exception) вместо точного типа',
       reasonDetailed:
-        'Падение остановлено, но общий catch (Exception) скрыл конкретный тип сбоя. Защита получает только половину очков за ход!',
+        'Падение остановлено, но общий catch (Exception) скрыл конкретный тип сбоя и не записал детали. Защита получает только половину очков за ход.',
       attackPointsEarned: halfPool - partialPts,
       defensePointsEarned: partialPts,
       steps,
@@ -1459,7 +1539,7 @@ export function simulateClash(
   return {
     outcome: 'REPELLED',
     headline: `ЗАЩИТА УСТОЯЛА: прицельно обработан ${attack.throwsException}`,
-    reasonDetailed: `Щит Защиты прицельно перехватил ${attack.throwsException}, зафиксировал детали в логе и сохранил целостность всех ресурсов.`,
+    reasonDetailed: `Конструкция Защиты корректно перехватила ${attack.throwsException}, зафиксировала детали в журнале и сохранила целостность ресурсов.`,
     attackPointsEarned: 0,
     defensePointsEarned: halfPool,
     steps,
@@ -1500,4 +1580,3 @@ export function getPatchedCodeLines(
     isAddedPatch: Boolean(p.isAddedPatch),
   }));
 }
-
