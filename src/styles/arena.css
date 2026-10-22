@@ -1,57 +1,64 @@
 :root {
-  --arena-bg: #111214;
-  --arena-surface: #17181c;
-  --arena-surface-2: #1f2127;
-  --arena-code-bg: #131417;
-  --arena-border: #2a2d35;
-  --arena-border-strong: #3b3f4a;
-  --arena-text: #ededef;
-  --arena-text-muted: #8a8f98;
+  --bg-page: #0f1115;
+  --bg-panel: #161920;
+  --bg-card: #1c2029;
+  --bg-card-hover: #232834;
+  --bg-code: #12141a;
 
-  --arena-attack: #d96b27;
-  --arena-attack-bg: rgba(217, 107, 39, 0.11);
-  --arena-attack-border: rgba(217, 107, 39, 0.45);
+  --border-subtle: #282d39;
+  --border-focus: #4b5568;
 
-  --arena-defense: #2563eb;
-  --arena-defense-bg: rgba(37, 99, 235, 0.12);
-  --arena-defense-border: rgba(37, 99, 235, 0.48);
+  --text-main: #f1f3f5;
+  --text-secondary: #9ba3b0;
+  --text-muted: #68707d;
 
-  --arena-step-ptr: #eab308;
-  --arena-step-bg: rgba(234, 179, 8, 0.12);
+  --accent-attack: #e06c24;
+  --accent-attack-soft: rgba(224, 108, 36, 0.12);
 
-  --arena-success: #2da44e;
-  --arena-success-bg: rgba(45, 164, 78, 0.12);
+  --accent-defense: #3b82f6;
+  --accent-defense-soft: rgba(59, 130, 246, 0.12);
 
-  --arena-warning: #d97706;
-  --arena-warning-bg: rgba(217, 119, 6, 0.13);
+  --accent-success: #22c55e;
+  --accent-success-soft: rgba(34, 197, 94, 0.12);
 
-  --arena-danger: #e5484d;
-  --arena-danger-bg: rgba(229, 72, 77, 0.13);
+  --accent-warning: #eab308;
+  --accent-warning-soft: rgba(234, 179, 8, 0.14);
 
-  --arena-font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif;
-  --arena-font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  --accent-danger: #ef4444;
+  --accent-danger-soft: rgba(239, 68, 68, 0.14);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
 }
 
 .arena-root.theme-light {
-  --arena-bg: #f3f2ee;
-  --arena-surface: #ffffff;
-  --arena-surface-2: #e8e6df;
-  --arena-code-bg: #faf9f6;
-  --arena-border: #d4d2c9;
-  --arena-border-strong: #b8b5aa;
-  --arena-text: #151618;
-  --arena-text-muted: #5a5e66;
+  --bg-page: #f4f5f7;
+  --bg-panel: #ffffff;
+  --bg-card: #f8f9fa;
+  --bg-card-hover: #eef0f4;
+  --bg-code: #fafbfc;
 
-  --arena-attack: #c2510c;
-  --arena-attack-bg: rgba(194, 81, 12, 0.08);
-  --arena-attack-border: rgba(194, 81, 12, 0.42);
+  --border-subtle: #dcdfe6;
+  --border-focus: #9ca3af;
 
-  --arena-defense: #1d4ed8;
-  --arena-defense-bg: rgba(29, 78, 216, 0.08);
-  --arena-defense-border: rgba(29, 78, 216, 0.42);
+  --text-main: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
 
-  --arena-step-ptr: #ca8a04;
-  --arena-step-bg: rgba(202, 138, 4, 0.12);
+  --accent-attack: #c2410c;
+  --accent-attack-soft: rgba(194, 65, 12, 0.08);
+
+  --accent-defense: #1d4ed8;
+  --accent-defense-soft: rgba(29, 78, 216, 0.08);
+
+  --accent-success: #16a34a;
+  --accent-success-soft: rgba(22, 163, 74, 0.1);
+
+  --accent-warning: #ca8a04;
+  --accent-warning-soft: rgba(202, 138, 4, 0.12);
+
+  --accent-danger: #dc2626;
+  --accent-danger-soft: rgba(220, 38, 38, 0.1);
 }
 
 * {
@@ -62,9 +69,9 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--arena-bg);
-  color: var(--arena-text);
-  font-family: var(--arena-font-sans);
+  background: var(--bg-page);
+  color: var(--text-main);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -74,746 +81,378 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--arena-bg);
-  color: var(--arena-text);
+  background: var(--bg-page);
+  color: var(--text-main);
 }
 
 /* ==========================================================================
-   ИНДИКАТОРНЫЕ СВЕТОДИОДЫ (LED DOTS) И МЕХАНИЧЕСКИЕ КЛАВИШИ (KBD)
-   ========================================================================== */
-@keyframes ledPulse {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.45;
-    transform: scale(0.92);
-  }
-}
-
-.arena-led {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--arena-text-muted);
-  flex-shrink: 0;
-}
-
-.arena-led.ok {
-  background: var(--arena-success);
-  box-shadow: 0 0 6px rgba(45, 164, 78, 0.55);
-}
-
-.arena-led.warn {
-  background: var(--arena-warning);
-  animation: ledPulse 1.4s infinite ease-in-out;
-}
-
-.arena-led.bad {
-  background: var(--arena-danger);
-  box-shadow: 0 0 6px rgba(229, 72, 77, 0.6);
-}
-
-.arena-led.atk {
-  background: var(--arena-attack);
-}
-
-.arena-led.def {
-  background: var(--arena-defense);
-}
-
-.arena-kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  padding: 3px 6px;
-  border-radius: 3px;
-  background: var(--arena-surface-2);
-  border: 1px solid var(--arena-border-strong);
-  border-bottom-width: 2px;
-  color: var(--arena-text);
-  white-space: nowrap;
-}
-
-/* ==========================================================================
-   ВЕРХНЯЯ ИНЖЕНЕРНАЯ ПАНЕЛЬ 52px (HAIRLINE BAR)
+   1. ЕДИНСТВЕННАЯ ЧИСТАЯ ШАПКА (60px) — ТОЛЬКО РАУНДЫ, СЧЁТ И ТЕМА
    ========================================================================== */
 .arena-topbar {
-  height: 52px;
-  min-height: 52px;
-  max-height: 52px;
-  padding: 0 16px;
-  background: var(--arena-surface);
-  border-bottom: 1px solid var(--arena-border);
+  height: 60px;
+  min-height: 60px;
+  padding: 0 28px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  z-index: 20;
-}
-
-.arena-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-  cursor: pointer;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--arena-text);
-  padding: 5px 8px;
-  border-radius: 4px;
-}
-
-.arena-brand:hover {
-  background: var(--arena-surface-2);
-  border-color: var(--arena-border);
-}
-
-.arena-brand-badge {
-  background: var(--arena-text);
-  color: var(--arena-bg);
-  font-family: var(--arena-font-mono);
-  font-weight: 800;
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  padding: 3px 6px;
-  border-radius: 2px;
-}
-
-/* Сегментированные переключатели в стиле IDE (острые углы 3px) */
-.arena-role-pills,
-.arena-round-pills {
-  display: flex;
-  align-items: center;
-  background: var(--arena-code-bg);
-  padding: 2px;
-  border-radius: 4px;
-  border: 1px solid var(--arena-border);
-  gap: 2px;
-}
-
-.arena-pill-btn {
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--arena-text-muted);
-  font-family: var(--arena-font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: background 0.1s ease, color 0.1s ease;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.arena-pill-btn:hover {
-  color: var(--arena-text);
-  background: var(--arena-surface-2);
-}
-
-.arena-pill-btn.active {
-  background: var(--arena-surface-2);
-  color: var(--arena-text);
-  border-color: var(--arena-border-strong);
-}
-
-.arena-pill-btn.done {
-  color: var(--arena-success);
-}
-
-/* Табло счёта Команда АЛЬФА vs Команда БЕТА */
-.arena-scoreboard {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-variant-numeric: tabular-nums;
-}
-
-.arena-team-score {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border-radius: 3px;
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.arena-team-score.is-attacking {
-  border-left: 3px solid var(--arena-attack);
-}
-
-.arena-team-score.is-defending {
-  border-left: 3px solid var(--arena-defense);
-}
-
-.arena-role-tag {
-  font-family: var(--arena-font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 2px;
-  text-transform: uppercase;
-}
-
-.arena-role-tag.atk {
-  background: var(--arena-attack-bg);
-  color: var(--arena-attack);
-}
-
-.arena-role-tag.def {
-  background: var(--arena-defense-bg);
-  color: var(--arena-defense);
-}
-
-.arena-score-num {
-  font-family: var(--arena-font-mono);
-  font-size: 15px;
-  font-weight: 800;
-}
-
-.arena-timer-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--arena-font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 5px 10px;
-  border-radius: 3px;
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  color: var(--arena-text);
-  cursor: pointer;
-}
-
-.arena-timer-pill.warning {
-  border-color: var(--arena-danger);
-  color: var(--arena-danger);
-}
-
-.arena-icon-btn {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  color: var(--arena-text);
-  height: 30px;
-  padding: 0 10px;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.arena-icon-btn:hover {
-  background: var(--arena-surface-2);
-  border-color: var(--arena-border-strong);
-}
-
-/* ==========================================================================
-   ЭКРАН 0: ИНЖЕНЕРНЫЙ СТАРТ И ВЫБОР РАБОЧЕГО МЕСТА
-   ========================================================================== */
-.arena-welcome-wrap {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 24px 32px;
-  overflow-y: auto;
-}
-
-.arena-hero-card {
-  max-width: 1140px;
-  width: 100%;
-  background: var(--arena-surface);
-  border: 1px solid var(--arena-border);
-  border-radius: 4px;
-  padding: 28px 32px;
-  display: flex;
-  flex-direction: column;
   gap: 24px;
 }
 
-.arena-hero-top {
+.arena-topbar-left {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 24px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--arena-border);
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
 }
 
-.arena-eyebrow {
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--arena-text-muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-}
-
-.arena-hero-title {
-  margin: 0;
-  font-size: clamp(24px, 2.4vw, 32px);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-}
-
-.arena-hero-sub {
-  margin: 8px 0 0;
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--arena-text-muted);
-  max-width: 68ch;
-}
-
-/* 3 строгих терминала выбора роли устройства (1px Hairline Grid) */
-.arena-device-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--arena-border);
-  border-radius: 4px;
-  overflow: hidden;
-  background: var(--arena-border);
-  gap: 1px;
-}
-
-.arena-device-card {
-  background: var(--arena-code-bg);
+.arena-title-btn {
+  background: transparent;
   border: none;
-  padding: 20px 22px;
-  text-align: left;
-  cursor: pointer;
-  color: var(--arena-text);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
-  transition: background 0.12s ease;
-}
-
-.arena-device-card:hover {
-  background: var(--arena-surface-2);
-}
-
-.arena-device-card.projector {
-  border-top: 3px solid var(--arena-text);
-}
-
-.arena-device-card.alpha {
-  border-top: 3px solid var(--arena-attack);
-}
-
-.arena-device-card.beta {
-  border-top: 3px solid var(--arena-defense);
-}
-
-.arena-device-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--arena-text-muted);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.arena-device-card h3 {
-  margin: 0 0 6px;
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.arena-device-card p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--arena-text-muted);
-}
-
-.arena-device-cta {
-  font-family: var(--arena-font-mono);
-  font-weight: 700;
-  font-size: 12px;
-  color: var(--arena-text);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Спецификация 4 раундов в таблично-инженерном виде */
-.arena-rounds-preview {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  border: 1px solid var(--arena-border);
-  border-radius: 4px;
-  background: var(--arena-border);
-  gap: 1px;
-}
-
-.arena-round-mini {
-  background: var(--arena-code-bg);
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.arena-round-mini-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--arena-text-muted);
-}
-
-.arena-round-mini-pts {
-  color: var(--arena-text);
-}
-
-.arena-round-mini h4 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.arena-round-mini code {
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  color: var(--arena-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ==========================================================================
-   ОСНОВНАЯ РАБОЧАЯ СЕТКА РАУНДА (SPLIT-PANE IDE LAYOUT)
-   ========================================================================== */
-.arena-stage-main {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Верхняя полоса контекста раунда */
-.arena-round-banner {
-  background: var(--arena-surface);
-  border-bottom: 1px solid var(--arena-border);
-  padding: 10px 18px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  position: relative;
-}
-
-.arena-timer-bar {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: var(--arena-defense);
-  transition: width 0.4s linear;
-}
-
-.arena-round-title-group {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.arena-round-num-tag {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border-strong);
-  padding: 4px 9px;
-  border-radius: 3px;
-  font-family: var(--arena-font-mono);
-  font-weight: 700;
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.arena-round-heading h2 {
-  margin: 0;
+  color: var(--text-main);
+  font-family: var(--font-sans);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+  letter-spacing: -0.01em;
 }
 
-.arena-round-heading p {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--arena-text-muted);
-}
-
-/* Шаги состояния экрана раунда */
-.arena-subphase-steps {
+.arena-round-nav {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.arena-step-chip {
-  padding: 5px 10px;
-  border-radius: 3px;
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
+.arena-round-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
   font-weight: 600;
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  color: var(--arena-text-muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.arena-round-tab:hover {
+  color: var(--text-main);
+  background: var(--bg-card);
+}
+
+.arena-round-tab.active {
+  color: var(--text-main);
+  background: var(--bg-card);
+  border-color: var(--border-subtle);
+}
+
+.arena-round-tab.done {
+  color: var(--accent-success);
+}
+
+/* Центральное табло счёта */
+.arena-score-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.arena-score-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.arena-score-pill strong {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.arena-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arena-quiet-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
-.arena-step-chip.active {
-  background: var(--arena-surface-2);
-  color: var(--arena-text);
-  border-color: var(--arena-text);
-}
-
-/* Двухколоночная сплит-сетка как в JetBrains Rider */
-.arena-work-grid {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 1.32fr 1fr;
-  background: var(--arena-border);
-  gap: 1px;
+.arena-quiet-btn:hover {
+  color: var(--text-main);
+  background: var(--bg-card);
 }
 
 /* ==========================================================================
-   ЛЕВАЯ ПАНЕЛЬ: C# РЕДАКТОР С ОТЛАДОЧНЫМ GUTTER + ПАНЕЛЬ ТЕЛЕМЕТРИИ CLR
+   2. СТАРТОВЫЙ ЭКРАН (МНОГО ВОЗДУХА, ПРОСТОЕ НАЧАЛО)
    ========================================================================== */
-.arena-ide-column {
-  min-height: 0;
-  background: var(--arena-code-bg);
+.arena-start-screen {
+  flex: 1;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  overflow-y: auto;
 }
 
-.arena-ide-window {
+.arena-start-box {
+  max-width: 880px;
+  width: 100%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 40px 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.arena-start-box h1 {
+  margin: 0 0 10px;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.arena-start-box p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.arena-start-rounds {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.arena-start-round-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.arena-start-round-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.arena-start-round-item h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.arena-start-round-item span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   3. РАБОЧИЙ ЭКРАН РАУНДА: ТОЛЬКО 2 ЧИСТЫХ БЛОКА (КОД СЛЕВА + 1 ШАГ СПРАВА)
+   ========================================================================== */
+.arena-workspace {
   flex: 1;
   min-height: 0;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 24px;
+  padding: 24px 28px;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ЛЕВЫЙ БЛОК: ТОЛЬКО ЧИСТЫЙ КОД C# */
+.arena-code-panel {
+  background: var(--bg-code);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.arena-ide-header {
-  height: 36px;
-  padding: 0 14px;
-  background: var(--arena-surface);
-  border-bottom: 1px solid var(--arena-border);
+.arena-code-header {
+  padding: 16px 24px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arena-code-header-top {
+  display: flex;
   justify-content: space-between;
-  font-family: var(--arena-font-mono);
-  font-size: 12px;
-}
-
-.arena-ide-file {
-  display: flex;
   align-items: center;
-  gap: 8px;
+}
+
+.arena-code-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.arena-code-points {
+  font-family: var(--font-mono);
+  font-size: 13px;
   font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
 }
 
-.arena-ide-tab-indicator {
-  width: 8px;
-  height: 8px;
-  background: var(--arena-defense);
-  border-radius: 1px;
+.arena-code-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 
-.arena-ide-body {
+/* Тело кода: крупный шрифт, много воздуха */
+.arena-code-lines {
   flex: 1;
-  padding: 12px 0;
-  overflow-y: auto;
+  padding: 24px 16px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  font-family: var(--arena-font-mono);
-  font-size: clamp(14px, 1.25vw, 18px);
-  line-height: 1.55;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: clamp(15px, 1.35vw, 19px);
+  line-height: 1.6;
+  overflow-y: auto;
 }
 
-.arena-code-line {
+.arena-line {
   display: grid;
-  grid-template-columns: 26px 32px 1fr auto;
+  grid-template-columns: 24px 30px 1fr auto;
   align-items: center;
-  gap: 8px;
-  padding: 2px 14px 2px 8px;
+  gap: 10px;
+  padding: 4px 14px 4px 8px;
+  border-radius: 6px;
   border-left: 3px solid transparent;
-  cursor: pointer;
-  transition: background 0.08s ease;
-  user-select: none;
+  transition: background 0.12s ease;
 }
 
-.arena-code-line:hover {
-  background: rgba(148, 163, 184, 0.06);
+.arena-line.diff-added {
+  background: var(--accent-defense-soft);
+  border-left-color: var(--accent-defense);
 }
 
-/* Колонка маркера отладчика (Instruction Pointer / Breakpoint) */
-.arena-gutter-marker {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 18px;
+.arena-line.trace-ok {
+  background: var(--accent-warning-soft);
+  border-left-color: var(--accent-warning);
 }
 
-.arena-bp-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
+.arena-line.trace-throw {
+  background: var(--accent-danger-soft);
+  border-left-color: var(--accent-danger);
 }
 
-.arena-bp-dot.atk {
-  background: var(--arena-attack);
+.arena-line.trace-catch {
+  background: var(--accent-defense-soft);
+  border-left-color: var(--accent-defense);
 }
 
-.arena-bp-dot.def {
-  background: var(--arena-defense);
+.arena-line.trace-finally {
+  background: var(--accent-success-soft);
+  border-left-color: var(--accent-success);
 }
 
-/* Жёлтая стрелка указателя инструкции Visual Studio */
-.arena-ip-arrow {
-  width: 14px;
-  height: 14px;
-  fill: var(--arena-step-ptr);
-  filter: drop-shadow(0 0 3px rgba(234, 179, 8, 0.45));
+.arena-line.trace-compile_error {
+  background: var(--accent-danger-soft);
+  border-left-color: var(--accent-danger);
+  text-decoration: wavy underline var(--accent-danger);
 }
 
-.arena-line-num {
-  color: var(--arena-text-muted);
-  font-size: 12px;
-  text-align: right;
-  opacity: 0.65;
-  font-variant-numeric: tabular-nums;
-}
-
-.arena-line-text {
-  white-space: pre;
-  overflow-x: auto;
-}
-
-/* Живой diff (+ try / catch / finally) */
-.arena-code-line.diff-added {
-  background: rgba(37, 99, 235, 0.08);
-  border-left-color: var(--arena-defense);
-}
-
-/* Активная строка трассировки */
-.arena-code-line.trace-ok {
-  background: var(--arena-step-bg);
-  border-left-color: var(--arena-step-ptr);
-}
-
-.arena-code-line.trace-throw {
-  background: var(--arena-danger-bg);
-  border-left-color: var(--arena-danger);
-}
-
-.arena-code-line.trace-catch {
-  background: var(--arena-defense-bg);
-  border-left-color: var(--arena-defense);
-}
-
-.arena-code-line.trace-finally {
-  background: var(--arena-success-bg);
-  border-left-color: var(--arena-success);
-}
-
-.arena-code-line.trace-compile_error {
-  background: var(--arena-danger-bg);
-  border-left-color: var(--arena-danger);
-  text-decoration: wavy underline var(--arena-danger);
-}
-
-/* Пропущенная строка после выброса исключения */
-.arena-code-line.line-skipped .arena-line-text {
+.arena-line.line-skipped .arena-line-code {
   text-decoration: line-through;
   opacity: 0.4;
 }
 
-/* Прицел выбора строки (Шаг 1) */
-.arena-code-line.target-attack {
-  border-left-color: var(--arena-attack);
-  background: var(--arena-attack-bg);
-}
-
-.arena-code-line.target-defense {
-  border-left-color: var(--arena-defense);
-  background: var(--arena-defense-bg);
-}
-
-.arena-line-badges {
+.arena-line-ptr {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
 }
 
-.arena-inline-badge {
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
+.arena-ip-arrow {
+  width: 14px;
+  height: 14px;
+  fill: var(--accent-warning);
+}
+
+.arena-line-number {
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: right;
+  user-select: none;
+}
+
+.arena-line-code {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.arena-line-tag {
+  font-family: var(--font-sans);
+  font-size: 12px;
   font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 2px;
+  padding: 3px 9px;
+  border-radius: 4px;
   white-space: nowrap;
 }
 
-.arena-inline-badge.var-badge {
-  background: var(--arena-surface-2);
-  color: var(--arena-step-ptr);
-  border: 1px solid var(--arena-border-strong);
+.arena-line-tag.tag-step {
+  background: var(--bg-panel);
+  color: var(--accent-warning);
+  border: 1px solid var(--border-focus);
 }
 
-.arena-inline-badge.skip-badge {
-  background: var(--arena-danger-bg);
-  color: var(--arena-danger);
-  border: 1px solid rgba(229, 72, 77, 0.35);
+.arena-line-tag.tag-skip {
+  background: var(--accent-danger-soft);
+  color: var(--accent-danger);
 }
 
-.arena-inline-badge.target-badge-atk {
-  background: var(--arena-attack-bg);
-  color: var(--arena-attack);
-  border: 1px solid var(--arena-attack-border);
+/* Небольшая спокойная строка статуса внизу окна кода (только когда запущена проверка) */
+.arena-code-footer {
+  padding: 12px 24px;
+  background: var(--bg-panel);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
-.arena-inline-badge.target-badge-def {
-  background: var(--arena-defense-bg);
-  color: var(--arena-defense);
-  border: 1px solid var(--arena-defense-border);
-}
-
-/* Цвета C# синтаксиса (стиль JetBrains Rider Dark / Light) */
+/* Цвета подсветки C# */
 .cs-tok-kw {
   color: #cf8e6d;
   font-weight: 600;
@@ -852,725 +491,249 @@ body {
 }
 
 .cs-tok-comment {
-  color: #7a7e85;
+  color: var(--text-muted);
   font-style: italic;
 }
 
-/* ЖИВАЯ СТРОКА ВЫЗОВА МЕТОДА СО СВОБОДНЫМ ВВОДОМ АРГУМЕНТОВ C# */
-.arena-call-bar {
-  background: var(--arena-surface);
-  border-top: 1px solid var(--arena-border);
-  padding: 6px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  font-family: var(--arena-font-mono);
-  font-size: 12px;
-  flex-wrap: wrap;
-}
-
-.arena-call-expr {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-
-.arena-arg-input {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border-strong);
-  color: var(--arena-step-ptr);
-  font-family: var(--arena-font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 2px;
-  width: 96px;
-  outline: none;
-}
-
-.arena-arg-input:focus {
-  border-color: var(--arena-defense);
-  background: var(--arena-surface-2);
-}
-
-.arena-arg-toggle {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border-strong);
-  color: var(--arena-text);
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 2px;
-  cursor: pointer;
-}
-
-.arena-arg-toggle.is-null {
-  color: var(--arena-danger);
-  border-color: var(--arena-danger);
-}
-
-/* ТАБЛИЦА ЛОКАЛЬНЫХ ПЕРЕМЕННЫХ ОТЛАДЧИКА (LOCALS / WATCH) */
-.arena-locals-pane {
-  background: var(--arena-code-bg);
-  border-top: 1px solid var(--arena-border);
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-}
-
-.arena-locals-header {
-  background: var(--arena-surface);
-  padding: 4px 14px;
-  border-bottom: 1px solid var(--arena-border);
-  display: grid;
-  grid-template-columns: 140px 1fr 130px;
-  gap: 10px;
-  color: var(--arena-text-muted);
-  font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.arena-locals-row {
-  padding: 4px 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
-  display: grid;
-  grid-template-columns: 140px 1fr 130px;
-  gap: 10px;
-  align-items: center;
-}
-
-.arena-locals-row.is-changed {
-  background: var(--arena-step-bg);
-}
-
-.arena-locals-row.is-fault {
-  background: var(--arena-danger-bg);
-  color: var(--arena-danger);
-}
-
-.arena-locals-name {
-  font-weight: 700;
-  color: var(--arena-text);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.arena-locals-val {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--arena-step-ptr);
-}
-
-.arena-locals-row.is-fault .arena-locals-val {
-  color: var(--arena-danger);
-  font-weight: 700;
-}
-
-.arena-locals-type {
-  color: var(--arena-text-muted);
-  text-align: right;
-}
-
-/* НИЖНЯЯ ПРИБОРНАЯ ПАНЕЛЬ ТЕЛЕМЕТРИИ CLR (3 ДАТЧИКА + СТРОКА ВЫВОДА) */
-.arena-telemetry-dock {
-  background: var(--arena-surface);
-  border-top: 1px solid var(--arena-border);
-  display: flex;
-  flex-direction: column;
-}
-
-.arena-telemetry-header {
-  padding: 5px 14px;
-  border-bottom: 1px solid var(--arena-border);
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  color: var(--arena-text-muted);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.arena-sensors-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  background: var(--arena-border);
-  gap: 1px;
-}
-
-.arena-sensor-card {
-  background: var(--arena-surface);
-  padding: 9px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.arena-sensor-label {
-  font-family: var(--arena-font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--arena-text-muted);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.arena-sensor-value {
-  font-family: var(--arena-font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.arena-sensor-card.status-good {
-  background: var(--arena-success-bg);
-}
-
-.arena-sensor-card.status-bad {
-  background: var(--arena-danger-bg);
-}
-
-.arena-sensor-card.status-warn {
-  background: var(--arena-warning-bg);
-}
-
 /* ==========================================================================
-   ПРАВАЯ ПАНЕЛЬ: УПРАВЛЕНИЕ ФАЗОЙ РАУНДА (БЕЗ ПУЗЫРЕЙ И ГРАДИЕНТОВ)
+   ПРАВЫЙ БЛОК: СТРОГО ОДИН ПРОСТОЙ ШАГ ЗА РАЗ
    ========================================================================== */
-.arena-phase-column {
-  min-height: 0;
-  background: var(--arena-surface);
-  display: flex;
-  flex-direction: column;
-}
-
-.arena-phase-panel {
-  flex: 1;
-  min-height: 0;
-  padding: 14px 16px;
+.arena-step-panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 28px 32px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 12px;
+  gap: 20px;
   overflow-y: auto;
 }
 
-/* Статус готовности команд в фазе планирования */
-.arena-envelopes-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--arena-border);
-  border-radius: 3px;
-  background: var(--arena-border);
-  gap: 1px;
-}
-
-.arena-envelope-box {
-  padding: 10px 12px;
-  background: var(--arena-code-bg);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.arena-envelope-box.atk {
-  border-top: 2px solid var(--arena-attack);
-}
-
-.arena-envelope-box.def {
-  border-top: 2px solid var(--arena-defense);
-}
-
-.arena-envelope-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.arena-lock-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--arena-font-mono);
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 2px;
-  font-weight: 700;
-}
-
-.arena-lock-badge.locked {
-  background: var(--arena-success-bg);
-  color: var(--arena-success);
-}
-
-.arena-lock-badge.waiting {
-  background: var(--arena-warning-bg);
-  color: var(--arena-warning);
-}
-
-/* Списки вариантов Атаки (А-1..А-3) и Защиты (З-1..З-4) */
-.arena-voice-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.arena-voice-group-label {
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--arena-text-muted);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.arena-cards-list {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.arena-option-card {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  border-left: 3px solid transparent;
-  border-radius: 3px;
-  padding: 8px 10px;
-  text-align: left;
-  color: var(--arena-text);
-  cursor: pointer;
+/* Индикатор текущего шага 1 -> 2 -> 3 -> 4 */
+.arena-step-progress {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  transition: background 0.1s ease, border-color 0.1s ease;
-}
-
-.arena-option-card:hover {
-  background: var(--arena-surface-2);
-  border-color: var(--arena-border-strong);
-}
-
-.arena-option-card.selected-atk {
-  border-color: var(--arena-attack-border);
-  border-left-color: var(--arena-attack);
-  background: var(--arena-attack-bg);
-}
-
-.arena-option-card.selected-def {
-  border-color: var(--arena-defense-border);
-  border-left-color: var(--arena-defense);
-  background: var(--arena-defense-bg);
-}
-
-.arena-option-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.arena-voice-code {
-  font-family: var(--arena-font-mono);
-  font-size: 12px;
-  font-weight: 800;
-  padding: 3px 7px;
-  border-radius: 2px;
-  white-space: nowrap;
-  border: 1px solid var(--arena-border-strong);
-  border-bottom-width: 2px;
-}
-
-.arena-voice-code.atk {
-  background: var(--arena-attack-bg);
-  color: var(--arena-attack);
-  border-color: var(--arena-attack-border);
-}
-
-.arena-voice-code.def {
-  background: var(--arena-defense-bg);
-  color: var(--arena-defense);
-  border-color: var(--arena-defense-border);
-}
-
-.arena-option-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.arena-option-title {
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.arena-option-code {
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  color: var(--arena-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Главная кнопка действия (строгая тактильная кнопка без градиентов) */
-.arena-primary-cta {
-  width: 100%;
-  border: 1px solid var(--arena-border-strong);
-  border-bottom-width: 2px;
-  border-radius: 3px;
-  padding: 11px 16px;
-  font-family: var(--arena-font-sans);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: #ffffff;
-  background: var(--arena-defense);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   gap: 8px;
-  transition: filter 0.1s ease, transform 0.06s ease;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.arena-primary-cta:hover {
+.arena-step-heading {
+  margin: 6px 0 4px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.arena-step-desc {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* Просторные карточки выбора (всего 3 или 4 на экране!) */
+.arena-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arena-choice-btn {
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px 18px;
+  text-align: left;
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  transition: all 0.12s ease;
+}
+
+.arena-choice-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-focus);
+}
+
+.arena-choice-btn.selected-attack {
+  border-color: var(--accent-attack);
+  background: var(--accent-attack-soft);
+}
+
+.arena-choice-btn.selected-defense {
+  border-color: var(--accent-defense);
+  background: var(--accent-defense-soft);
+}
+
+.arena-choice-btn.correct {
+  border-color: var(--accent-success);
+  background: var(--accent-success-soft);
+}
+
+.arena-choice-btn.wrong {
+  border-color: var(--accent-danger);
+  background: var(--accent-danger-soft);
+}
+
+.arena-choice-title {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.arena-choice-code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.arena-choice-sub {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+/* Блок результата на Шаге 3 */
+.arena-result-box {
+  border-radius: 8px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.arena-result-box.REPELLED {
+  background: var(--accent-success-soft);
+  border: 1.5px solid var(--accent-success);
+}
+
+.arena-result-box.PARTIAL {
+  background: var(--accent-warning-soft);
+  border: 1.5px solid var(--accent-warning);
+}
+
+.arena-result-box.BREACHED {
+  background: var(--accent-danger-soft);
+  border: 1.5px solid var(--accent-danger);
+}
+
+.arena-result-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.arena-result-text {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.arena-trace-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.arena-rule-takeaway {
+  background: var(--bg-card);
+  border-left: 3px solid var(--accent-defense);
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Шкала выбора игрока 1..6 на Шаге 4 */
+.arena-player-row {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.arena-player-slot {
+  padding: 8px 4px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.arena-player-slot.active {
+  background: var(--accent-warning);
+  color: #111827;
+  border-color: var(--accent-warning);
+}
+
+/* Кнопки переходов внизу правого блока */
+.arena-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.arena-main-btn {
+  flex: 1;
+  background: var(--accent-defense);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 14px 20px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+
+.arena-main-btn:hover:not(:disabled) {
   filter: brightness(1.08);
 }
 
-.arena-primary-cta:active {
-  transform: translateY(1px);
-}
-
-/* ==========================================================================
-   ФАЗА 2: ПОШАГОВЫЙ ОТЛАДЧИК CLR (TRACING)
-   ========================================================================== */
-.arena-trace-explanation {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border-strong);
-  border-left: 3px solid var(--arena-step-ptr);
-  border-radius: 3px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.arena-trace-step-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-family: var(--arena-font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--arena-text-muted);
-}
-
-.arena-trace-comment {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.45;
-}
-
-.arena-trace-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.arena-secondary-btn {
-  flex: 1;
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border-strong);
-  border-bottom-width: 2px;
-  color: var(--arena-text);
-  padding: 9px 12px;
-  border-radius: 3px;
-  font-weight: 600;
-  font-size: 12px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.arena-secondary-btn:hover:not(:disabled) {
-  background: var(--arena-surface-2);
-}
-
-.arena-secondary-btn:disabled {
-  opacity: 0.4;
+.arena-main-btn:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-/* ==========================================================================
-   ФАЗА 3: МЕХАНИЧЕСКИЙ СЕЛЕКТОР ОТВЕЧАЮЩЕГО (ПРОТИВ «ОДНОГО ОТЛИЧНИКА»)
-   ========================================================================== */
-.arena-roulette-box {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border-strong);
-  border-radius: 3px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.arena-main-btn.attack-btn {
+  background: var(--accent-attack);
 }
 
-.arena-roulette-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-/* Живой 6-секционный барабан выбора номера участника (01..06) */
-.arena-drum-strip {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 4px;
-  background: var(--arena-surface);
-  padding: 4px;
-  border: 1px solid var(--arena-border);
-  border-radius: 3px;
-}
-
-.arena-drum-slot {
-  padding: 6px 4px;
-  text-align: center;
-  font-family: var(--arena-font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--arena-text-muted);
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  border-radius: 2px;
-  transition: all 0.08s ease;
-}
-
-.arena-drum-slot.active-slot {
-  background: var(--arena-step-ptr);
-  color: #111214;
-  border-color: var(--arena-step-ptr);
-  font-weight: 800;
-}
-
-.arena-roulette-question {
-  margin: 0;
+.arena-back-btn {
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-family: var(--font-sans);
   font-size: 14px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.arena-roulette-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.arena-roulette-opt-btn {
-  background: var(--arena-surface);
-  border: 1px solid var(--arena-border);
-  border-left: 3px solid transparent;
-  border-radius: 3px;
-  padding: 9px 11px;
-  color: var(--arena-text);
-  text-align: left;
-  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
 }
 
-.arena-roulette-opt-btn:hover {
-  background: var(--arena-surface-2);
+.arena-back-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
 }
 
-.arena-roulette-opt-btn.correct {
-  border-color: var(--arena-success);
-  border-left-color: var(--arena-success);
-  background: var(--arena-success-bg);
-}
-
-.arena-roulette-opt-btn.wrong {
-  border-color: var(--arena-danger);
-  border-left-color: var(--arena-danger);
-  background: var(--arena-danger-bg);
-}
-
-/* ==========================================================================
-   ФАЗА 4: ВЕРДИКТ РАУНДА + ПРАВИЛО C# + ПЕРЕКЛЮЧАТЕЛЬ СЦЕНАРИЕВ
-   ========================================================================== */
-.arena-verdict-banner {
-  border-radius: 3px;
-  padding: 11px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.arena-verdict-banner.REPELLED {
-  background: var(--arena-success-bg);
-  border: 1px solid var(--arena-success);
-  border-left-width: 4px;
-}
-
-.arena-verdict-banner.PARTIAL {
-  background: var(--arena-warning-bg);
-  border: 1px solid var(--arena-warning);
-  border-left-width: 4px;
-}
-
-.arena-verdict-banner.BREACHED {
-  background: var(--arena-danger-bg);
-  border: 1px solid var(--arena-danger);
-  border-left-width: 4px;
-}
-
-.arena-verdict-title {
-  font-family: var(--arena-font-mono);
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.arena-rule-card {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  border-left: 3px solid var(--arena-defense);
-  border-radius: 3px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.arena-rule-card h4 {
-  margin: 0;
-  font-family: var(--arena-font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--arena-text);
-}
-
-.arena-rule-card p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--arena-text-muted);
-}
-
-/* ==========================================================================
-   РЕЖИМ КОМАНДНОГО НОУТБУКА (3-ШАГОВЫЙ ПУЛЬТ ИГРОКОВ 1–6)
-   ========================================================================== */
-.arena-role-chain-steps {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border: 1px solid var(--arena-border);
-  border-radius: 3px;
-  background: var(--arena-border);
-  gap: 1px;
-}
-
-.arena-chain-box {
-  background: var(--arena-code-bg);
-  padding: 8px 10px;
-  font-size: 12px;
-}
-
-.arena-chain-box strong {
-  display: block;
-  font-family: var(--arena-font-mono);
-  font-size: 10px;
-  text-transform: uppercase;
-  color: var(--arena-text-muted);
-  margin-bottom: 2px;
-}
-
-.arena-chain-box.active {
-  border-top: 2px solid var(--arena-defense);
-}
-
-.arena-chain-box.done {
-  border-top: 2px solid var(--arena-success);
-}
-
-/* ==========================================================================
-   ЭКРАН 5: ФИНАЛ И СПРАВОЧНИК ЗАЩИТНОГО КОДА C#
-   ========================================================================== */
-.arena-finale-wrap {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr 1.25fr;
-  background: var(--arena-border);
-  gap: 1px;
-  overflow-y: auto;
-}
-
-.arena-podium-card,
-.arena-shield-card {
-  background: var(--arena-surface);
-  padding: 22px 26px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.arena-podium-scores {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--arena-border);
-  background: var(--arena-border);
-  gap: 1px;
-}
-
-.arena-podium-team {
-  background: var(--arena-code-bg);
-  padding: 16px;
-  text-align: center;
-}
-
-.arena-podium-team.winner {
-  border-top: 3px solid var(--arena-success);
-}
-
-.arena-podium-big-pts {
-  font-family: var(--arena-font-mono);
-  font-size: 34px;
-  font-weight: 800;
-  margin: 6px 0;
-}
-
-.arena-shield-rules-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.arena-shield-rule-item {
-  background: var(--arena-code-bg);
-  border: 1px solid var(--arena-border);
-  border-left: 3px solid var(--arena-success);
-  border-radius: 3px;
-  padding: 9px 12px;
+.arena-back-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1024px) {
@@ -1579,10 +742,8 @@ body {
     min-height: 100vh;
     overflow-y: auto;
   }
-  .arena-work-grid,
-  .arena-finale-wrap,
-  .arena-device-grid,
-  .arena-rounds-preview {
+  .arena-workspace,
+  .arena-start-rounds {
     grid-template-columns: 1fr;
   }
 }

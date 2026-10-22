@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   ARENA_ROUNDS,
-  DeviceRole,
   getPatchedCodeLines,
   RoundNumber,
   simulateClash,
@@ -15,44 +14,30 @@ import {
   saveArenaState,
 } from './arenaSync';
 import { CSharpLineSyntax } from './CSharpCodeHighlighter';
-import {
-  buildLocalsTable,
-  createDefaultCustomArgs,
-  CustomRoundArgs,
-  getCustomArgsForAttackPreset,
-  simulateCustomArgsClash,
-} from './liveEvaluator';
 import { soundEngine } from './soundEngine';
 import '../styles/arena.css';
 
-// Векторный указатель текущей строки отладчика (Instruction Pointer в стиле Visual Studio / Rider)
-const DebuggerPointerIcon: React.FC = () => (
-  <svg
-    className="arena-ip-arrow"
-    viewBox="0 0 16 16"
-    aria-hidden="true"
-  >
+// Простой векторный указатель активной строки кода
+const StepPointerIcon: React.FC = () => (
+  <svg className="arena-ip-arrow" viewBox="0 0 16 16" aria-hidden="true">
     <path d="M2 3.5h6.2L13.5 8l-5.3 4.5H2V3.5z" />
   </svg>
 );
 
+type SimpleTurnStep = 'attack_turn' | 'defense_turn' | 'result_view' | 'blitz_question';
+
 export const ExceptionArenaApp: React.FC = () => {
   const [state, rawDispatch] = useReducer(arenaReducer, undefined, loadArenaState);
-  const [deviceRole, setDeviceRole] = useState<DeviceRole>('projector');
-  const [drumSpinning, setDrumSpinning] = useState(false);
-  const [drumDisplaySlot, setDrumDisplaySlot] = useState<number>(
+  const [turnStep, setTurnStep] = useState<SimpleTurnStep>('attack_turn');
+  const [spinningPlayer, setSpinningPlayer] = useState(false);
+  const [displayedPlayer, setDisplayedPlayer] = useState<number>(
     state.roulettePlayerNum
   );
-  const [customArgs, setCustomArgs] = useState<CustomRoundArgs>(() =>
-    createDefaultCustomArgs()
-  );
-  const [useCustomEval, setUseCustomEval] = useState<boolean>(false);
 
   const syncRef = useRef<ReturnType<typeof createArenaSyncChannel> | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  // Синхронизация вкладок и окон (Проектор <-> Терминал Альфа <-> Терминал Бета)
   useEffect(() => {
     const channel = createArenaSyncChannel((remoteState) => {
       stateRef.current = remoteState;
@@ -70,30 +55,20 @@ export const ExceptionArenaApp: React.FC = () => {
     syncRef.current?.publish(next);
   };
 
+  // При смене раунда всегда начинаем с Шага 1 (Ход Атаки)
   useEffect(() => {
-    const handleStorage = () => {
-      const loaded = loadArenaState();
-      stateRef.current = loaded;
-      rawDispatch({ type: 'SYNC_FROM_REMOTE', payload: loaded });
-    };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
-
-  // Секундный таймер раунда
-  useEffect(() => {
-    if (
-      !state.timerRunning ||
-      state.stage !== 'round' ||
-      state.subPhase !== 'planning'
-    ) {
-      return;
+    if (state.subPhase === 'planning') {
+      setTurnStep('attack_turn');
+    } else if (state.subPhase === 'tracing' || state.subPhase === 'summary') {
+      setTurnStep('result_view');
+    } else if (state.subPhase === 'roulette') {
+      setTurnStep('blitz_question');
     }
-    const id = window.setInterval(() => {
-      dispatch({ type: 'TICK_TIMER' });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [state.timerRunning, state.stage, state.subPhase]);
+  }, [state.roundNumber, state.subPhase]);
+
+  useEffect(() => {
+    setDisplayedPlayer(state.roulettePlayerNum);
+  }, [state.roulettePlayerNum]);
 
   const currentRound = useMemo(
     () =>
@@ -107,61 +82,21 @@ export const ExceptionArenaApp: React.FC = () => {
     [state.roundNumber]
   );
 
-  const activeAttackId =
-    state.subPhase === 'summary' && state.sandboxAttackId
-      ? state.sandboxAttackId
-      : state.selectedAttackId || 'A1';
+  const attackerTeamTitle = attacker === 'ALPHA' ? 'Команда Альфа' : 'Команда Бета';
+  const defenderTeamTitle = defender === 'ALPHA' ? 'Команда Альфа' : 'Команда Бета';
 
-  const activeDefenseId =
-    state.subPhase === 'summary' && state.sandboxDefenseId
-      ? state.sandboxDefenseId
-      : state.selectedDefenseId || 'D1';
+  const activeAttackId = state.selectedAttackId || 'A1';
+  const activeDefenseId = state.selectedDefenseId || 'D1';
 
-  // При переключении пресета атаки (A1..A3) синхронизируем поля аргументов вызова
-  useEffect(() => {
-    setUseCustomEval(false);
-    setCustomArgs((prev) =>
-      getCustomArgsForAttackPreset(state.roundNumber, activeAttackId, prev)
-    );
-  }, [state.roundNumber, activeAttackId]);
+  const simulation = useMemo(
+    () => simulateClash(currentRound, activeAttackId, activeDefenseId),
+    [currentRound, activeAttackId, activeDefenseId]
+  );
 
-  const simulation = useMemo(() => {
-    if (useCustomEval) {
-      return simulateCustomArgsClash(
-        currentRound,
-        customArgs,
-        activeDefenseId
-      );
-    }
-    return simulateClash(currentRound, activeAttackId, activeDefenseId);
-  }, [
-    useCustomEval,
-    currentRound,
-    customArgs,
-    activeAttackId,
-    activeDefenseId,
-  ]);
-
-  // Живая вставка выбранного патча try/catch/finally в окно редактора
-  const previewDefenseId = useMemo(() => {
-    if (state.subPhase === 'planning') {
-      const isDefenseLaptop =
-        (deviceRole === 'ALPHA' && defender === 'ALPHA') ||
-        (deviceRole === 'BETA' && defender === 'BETA');
-      if (isDefenseLaptop) return state.selectedDefenseId;
-      if (state.attackLocked && state.defenseLocked) return state.selectedDefenseId;
-      return null;
-    }
-    return activeDefenseId;
-  }, [
-    state.subPhase,
-    deviceRole,
-    defender,
-    state.selectedDefenseId,
-    state.attackLocked,
-    state.defenseLocked,
-    activeDefenseId,
-  ]);
+  // На Шаге 1 (Атака) показываем исходный уязвимый метод;
+  // На Шаге 2 (Защита) и далее сразу показываем выбранный патч try/catch прямо в коде!
+  const previewDefenseId =
+    turnStep === 'attack_turn' ? null : state.selectedDefenseId;
 
   const displayedCodeLines = useMemo(
     () => getPatchedCodeLines(currentRound, previewDefenseId),
@@ -169,120 +104,36 @@ export const ExceptionArenaApp: React.FC = () => {
   );
 
   const activeStep =
-    state.subPhase === 'tracing'
-      ? simulation.steps[Math.min(state.traceStepIdx, simulation.steps.length - 1)]
-      : state.subPhase === 'roulette' || state.subPhase === 'summary'
-      ? simulation.steps[simulation.steps.length - 1]
+    turnStep === 'result_view' || turnStep === 'blitz_question'
+      ? simulation.steps[
+          Math.min(state.traceStepIdx, simulation.steps.length - 1)
+        ]
       : null;
 
-  // Живая таблица переменных Locals / Watch для текущего шага отладчика
-  const localsRows = useMemo(
-    () => buildLocalsTable(currentRound, customArgs, activeStep, simulation),
-    [currentRound, customArgs, activeStep, simulation]
-  );
-
-  // Живое вращение механического селектора участников (01..06) с тактильными щелчками
-  const triggerDrumSpin = (targetPlayer?: 1 | 2 | 3 | 4 | 5 | 6) => {
-    const finalSlot =
-      targetPlayer ??
-      (((Math.floor(Math.random() * 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6));
-    setDrumSpinning(true);
-
-    const delays = [55, 65, 75, 90, 110, 135, 165, 200, 245];
-    let step = 0;
-    let current = drumDisplaySlot;
+  // Короткое вращение выбора номера участника (1..6)
+  const spinPlayerNumber = () => {
+    const nextNum = ((Math.floor(Math.random() * 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6);
+    setSpinningPlayer(true);
+    const delays = [60, 80, 100, 130, 170, 220];
+    let idx = 0;
+    let cur = displayedPlayer;
 
     const tick = () => {
-      if (step < delays.length) {
-        current = (current % 6) + 1;
-        setDrumDisplaySlot(current);
-        soundEngine.playStepTick(stateRef.current.soundEnabled, 0.9 + step * 0.04);
-        step += 1;
-        window.setTimeout(tick, delays[step - 1]);
+      if (idx < delays.length) {
+        cur = (cur % 6) + 1;
+        setDisplayedPlayer(cur);
+        soundEngine.playStepTick(stateRef.current.soundEnabled);
+        idx += 1;
+        window.setTimeout(tick, delays[idx - 1]);
       } else {
-        setDrumDisplaySlot(finalSlot);
-        setDrumSpinning(false);
+        setDisplayedPlayer(nextNum);
+        setSpinningPlayer(false);
         soundEngine.playVerifiedTone(stateRef.current.soundEnabled);
-        dispatch({ type: 'SET_ROULETTE_PLAYER', playerNum: finalSlot });
+        dispatch({ type: 'SET_ROULETTE_PLAYER', playerNum: nextNum });
       }
     };
     tick();
   };
-
-  useEffect(() => {
-    setDrumDisplaySlot(state.roulettePlayerNum);
-  }, [state.roulettePlayerNum]);
-
-  // Запуск произвольного вызова метода с введёнными аргументами C#
-  const runCustomMethodCall = () => {
-    setUseCustomEval(true);
-    dispatch({ type: 'LAUNCH_CLASH' });
-    soundEngine.playLockClick(state.soundEnabled);
-  };
-
-  // Горячие клавиши ведущего на проекторе (F5 / Пробел / Стрелки)
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (
-        document.activeElement &&
-        ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)
-      ) {
-        return;
-      }
-      if (state.stage === 'round' && state.subPhase === 'planning') {
-        if (e.key === 'F5') {
-          e.preventDefault();
-          soundEngine.playLockClick(state.soundEnabled);
-          dispatch({ type: 'LAUNCH_CLASH' });
-        }
-      } else if (state.stage === 'round' && state.subPhase === 'tracing') {
-        if (e.key === 'ArrowRight' || e.key === ' ') {
-          e.preventDefault();
-          if (state.traceStepIdx < simulation.steps.length - 1) {
-            const nextStep = simulation.steps[state.traceStepIdx + 1];
-            if (
-              nextStep?.stepKind === 'explode' ||
-              nextStep?.stepKind === 'compile_error' ||
-              nextStep?.stepKind === 'leak'
-            ) {
-              soundEngine.playExceptionInterrupt(state.soundEnabled);
-            } else {
-              soundEngine.playStepTick(state.soundEnabled);
-            }
-            dispatch({ type: 'STEP_TRACE', stepIdx: state.traceStepIdx + 1 });
-          } else {
-            dispatch({ type: 'OPEN_ROULETTE' });
-            triggerDrumSpin(state.roulettePlayerNum);
-          }
-        } else if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          if (state.traceStepIdx > 0) {
-            soundEngine.playStepTick(state.soundEnabled, 0.85);
-            dispatch({ type: 'STEP_TRACE', stepIdx: state.traceStepIdx - 1 });
-          }
-        }
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [
-    state.stage,
-    state.subPhase,
-    state.soundEnabled,
-    state.traceStepIdx,
-    state.roulettePlayerNum,
-    simulation.steps,
-  ]);
-
-  const formatTimer = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  const laptopTeamId =
-    deviceRole === 'ALPHA' ? 'ALPHA' : deviceRole === 'BETA' ? 'BETA' : null;
-  const isLaptopAttacker = laptopTeamId === attacker;
 
   const getStepTraceClass = (stepKind?: string) => {
     if (!stepKind) return '';
@@ -297,170 +148,77 @@ export const ExceptionArenaApp: React.FC = () => {
   return (
     <div className={`arena-root ${state.lightTheme ? 'theme-light' : ''}`}>
       {/* ====================================================================
-          ВЕРХНЯЯ ИНЖЕНЕРНАЯ ПАНЕЛЬ 52px
+          1. ЧИСТАЯ ШАПКА (ТОЛЬКО РАУНДЫ, СЧЁТ ДВУХ КОМАНД И ТЕМА)
           ==================================================================== */}
       <header className="arena-topbar">
-        <button
-          type="button"
-          className="arena-brand"
-          onClick={() => dispatch({ type: 'GO_TO_WELCOME' })}
-          title="Вернуться к выбору рабочего терминала"
-        >
-          <span className="arena-brand-badge">CLR .NET 8</span>
-          <span>C# Exception Arena</span>
-        </button>
-
-        {/* Сегментированный переключатель терминала */}
-        <div className="arena-role-pills" role="group" aria-label="Режим терминала">
+        <div className="arena-topbar-left">
           <button
             type="button"
-            className={`arena-pill-btn ${deviceRole === 'projector' ? 'active' : ''}`}
-            onClick={() => {
-              soundEngine.playStepTick(state.soundEnabled);
-              setDeviceRole('projector');
-            }}
+            className="arena-title-btn"
+            onClick={() => dispatch({ type: 'GO_TO_WELCOME' })}
           >
-            <span
-              className={`arena-led ${deviceRole === 'projector' ? 'ok' : ''}`}
-            />
-            Экран доски
+            C# Exception Arena
           </button>
-          <button
-            type="button"
-            className={`arena-pill-btn ${deviceRole === 'ALPHA' ? 'active' : ''}`}
-            onClick={() => {
-              soundEngine.playStepTick(state.soundEnabled);
-              setDeviceRole('ALPHA');
-            }}
-          >
-            <span
-              className={`arena-led ${deviceRole === 'ALPHA' ? 'atk' : ''}`}
-            />
-            Пульт АЛЬФА
-          </button>
-          <button
-            type="button"
-            className={`arena-pill-btn ${deviceRole === 'BETA' ? 'active' : ''}`}
-            onClick={() => {
-              soundEngine.playStepTick(state.soundEnabled);
-              setDeviceRole('BETA');
-            }}
-          >
-            <span
-              className={`arena-led ${deviceRole === 'BETA' ? 'def' : ''}`}
-            />
-            Пульт БЕТА
-          </button>
-        </div>
 
-        {/* Быстрая навигация по 4 раундам и Финалу */}
-        <div className="arena-round-pills" role="group" aria-label="Раунды">
-          {([1, 2, 3, 4] as RoundNumber[]).map((rNum) => {
-            const isDone = Boolean(state.roundHistory[rNum]);
-            const isCurrent =
-              state.stage === 'round' && state.roundNumber === rNum;
-            return (
-              <button
-                key={rNum}
-                type="button"
-                className={`arena-pill-btn ${isCurrent ? 'active' : ''} ${
-                  isDone ? 'done' : ''
-                }`}
-                onClick={() => {
-                  soundEngine.playStepTick(state.soundEnabled);
-                  dispatch({ type: 'SELECT_ROUND', roundNumber: rNum });
-                }}
-              >
-                R{rNum}
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            className={`arena-pill-btn ${state.stage === 'finale' ? 'active' : ''}`}
-            onClick={() => {
-              soundEngine.playStepTick(state.soundEnabled);
-              dispatch({ type: 'GO_TO_FINALE' });
-            }}
-          >
-            Итог
-          </button>
-        </div>
-
-        {/* Табло счёта и управление средой */}
-        <div className="arena-scoreboard">
-          <div
-            className={`arena-team-score ${
-              attacker === 'ALPHA' ? 'is-attacking' : 'is-defending'
-            }`}
-          >
-            <span
-              className={`arena-role-tag ${attacker === 'ALPHA' ? 'atk' : 'def'}`}
-            >
-              {attacker === 'ALPHA' ? 'ATK' : 'DEF'}
-            </span>
-            <span>АЛЬФА</span>
-            <span className="arena-score-num">{state.alphaScore}</span>
-          </div>
-
-          <div
-            className={`arena-team-score ${
-              attacker === 'BETA' ? 'is-attacking' : 'is-defending'
-            }`}
-          >
-            <span
-              className={`arena-role-tag ${attacker === 'BETA' ? 'atk' : 'def'}`}
-            >
-              {attacker === 'BETA' ? 'ATK' : 'DEF'}
-            </span>
-            <span>БЕТА</span>
-            <span className="arena-score-num">{state.betaScore}</span>
-          </div>
-
-          {state.stage === 'round' && (
+          <nav className="arena-round-nav" aria-label="Раунды">
+            {([1, 2, 3, 4] as RoundNumber[]).map((rNum) => {
+              const isCurrent =
+                state.stage === 'round' && state.roundNumber === rNum;
+              const isDone = Boolean(state.roundHistory[rNum]);
+              return (
+                <button
+                  key={rNum}
+                  type="button"
+                  className={`arena-round-tab ${isCurrent ? 'active' : ''} ${
+                    isDone ? 'done' : ''
+                  }`}
+                  onClick={() => {
+                    setTurnStep('attack_turn');
+                    dispatch({ type: 'SELECT_ROUND', roundNumber: rNum });
+                  }}
+                >
+                  Раунд {rNum}
+                </button>
+              );
+            })}
             <button
               type="button"
-              className={`arena-timer-pill ${state.timerSec <= 10 ? 'warning' : ''}`}
-              onClick={() => dispatch({ type: 'TOGGLE_TIMER' })}
-              title="Пауза / запуск таймера раунда"
+              className={`arena-round-tab ${
+                state.stage === 'finale' ? 'active' : ''
+              }`}
+              onClick={() => dispatch({ type: 'GO_TO_FINALE' })}
             >
-              <span
-                className={`arena-led ${
-                  state.timerRunning
-                    ? state.timerSec <= 10
-                      ? 'bad'
-                      : 'ok'
-                    : 'warn'
-                }`}
-              />
-              {formatTimer(state.timerSec)}
+              Итоги
             </button>
-          )}
+          </nav>
+        </div>
 
+        <div className="arena-score-strip">
+          <div className="arena-score-pill">
+            <span>Команда Альфа</span>
+            <strong>{state.alphaScore}</strong>
+          </div>
+          <div className="arena-score-pill">
+            <span>Команда Бета</span>
+            <strong>{state.betaScore}</strong>
+          </div>
+        </div>
+
+        <div className="arena-topbar-right">
           <button
             type="button"
-            className="arena-icon-btn"
-            onClick={() => dispatch({ type: 'TOGGLE_SOUND' })}
-            title="Включить / выключить аппаратный звук отладчика"
-          >
-            <span className={`arena-led ${state.soundEnabled ? 'ok' : ''}`} />
-            {state.soundEnabled ? 'Звук ВКЛ' : 'Звук ВЫКЛ'}
-          </button>
-
-          <button
-            type="button"
-            className="arena-icon-btn"
+            className="arena-quiet-btn"
             onClick={() => dispatch({ type: 'TOGGLE_THEME' })}
-            title="Переключить контрастную тему для проектора"
           >
-            {state.lightTheme ? 'Тёмная схема' : 'Светлая схема'}
+            {state.lightTheme ? 'Тёмная тема' : 'Светлая тема'}
           </button>
-
           <button
             type="button"
-            className="arena-icon-btn"
-            onClick={() => dispatch({ type: 'RESET_ALL' })}
-            title="Сбросить состояние всех раундов"
+            className="arena-quiet-btn"
+            onClick={() => {
+              setTurnStep('attack_turn');
+              dispatch({ type: 'RESET_ALL' });
+            }}
           >
             Сброс
           </button>
@@ -468,1631 +226,626 @@ export const ExceptionArenaApp: React.FC = () => {
       </header>
 
       {/* ====================================================================
-          ЭКРАН 0: ИНЖЕНЕРНЫЙ СТАРТ И ВЫБОР РАБОЧЕГО МЕСТА
+          2. СТАРТОВЫЙ ЭКРАН (ЛАКОНИЧНЫЙ ВХОД В ИГРУ)
           ==================================================================== */}
       {state.stage === 'welcome' && (
-        <main className="arena-welcome-wrap">
-          <section className="arena-hero-card">
-            <div className="arena-hero-top">
-              <div>
-                <div className="arena-eyebrow">
-                  ПРАКТИКУМ ПО ОБРАБОТКЕ ИСКЛЮЧЕНИЙ C# · .NET CLR DEBUGGER
-                </div>
-                <h1 className="arena-hero-title">
-                  C# Exception Arena: Атака и Защита кода
-                </h1>
-                <p className="arena-hero-sub">
-                  Четыре раунда разбора реальных сбоев времени выполнения. Одна
-                  команда ищет уязвимую строку метода и подбирает входной вектор,
-                  вторая — встраивает конструкцию <code>try / catch / finally</code>{' '}
-                  и защищает решение на контрольном блиц-опросе.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="arena-primary-cta"
-                style={{ width: 'auto', padding: '12px 22px' }}
-                onClick={() => {
-                  soundEngine.playLockClick(state.soundEnabled);
-                  setDeviceRole('projector');
-                  dispatch({ type: 'START_GAME' });
-                }}
-              >
-                Открыть Раунд 1 на доске
-              </button>
+        <main className="arena-start-screen">
+          <section className="arena-start-box">
+            <div>
+              <h1>Атака и Защита кода на C#</h1>
+              <p>
+                Учебная игра из 4 раундов. В каждом раунде одна команда ищет,
+                какими входными данными сломать метод C#, а вторая выбирает
+                защитную конструкцию <code>try / catch / finally</code>.
+              </p>
             </div>
 
-            {/* 3 строгих терминала выбора роли устройства */}
-            <div className="arena-device-grid">
-              <button
-                type="button"
-                className="arena-device-card projector"
-                onClick={() => {
-                  soundEngine.playLockClick(state.soundEnabled);
-                  setDeviceRole('projector');
-                  dispatch({ type: 'START_GAME' });
-                }}
-              >
-                <span className="arena-device-badge">
-                  <span className="arena-led ok" />
-                  ТЕРМИНАЛ 01 · ДОСКА / ПРОЕКТОР
-                </span>
-                <div>
-                  <h3>Центральный отладчик у доски</h3>
-                  <p>
-                    Окно метода C#, живой ввод аргументов вызова, таблица
-                    переменных Locals, панель ресурсов БД и стека вызовов.
-                  </p>
-                </div>
-                <span className="arena-device-cta">
-                  Запустить режим доски →
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className="arena-device-card alpha"
-                onClick={() => {
-                  soundEngine.playLockClick(state.soundEnabled);
-                  setDeviceRole('ALPHA');
-                  dispatch({ type: 'START_GAME' });
-                }}
-              >
-                <span className="arena-device-badge">
-                  <span className="arena-led atk" />
-                  ТЕРМИНАЛ 02 · КОМАНДА АЛЬФА
-                </span>
-                <div>
-                  <h3>Рабочий пульт Команды АЛЬФА</h3>
-                  <p>
-                    Раунды 1 и 3 — выбор уязвимой строки и входного пакета атаки.
-                    Раунды 2 и 4 — проектирование защитного блока в коде.
-                  </p>
-                </div>
-                <span className="arena-device-cta">
-                  Открыть пульт АЛЬФА →
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className="arena-device-card beta"
-                onClick={() => {
-                  soundEngine.playLockClick(state.soundEnabled);
-                  setDeviceRole('BETA');
-                  dispatch({ type: 'START_GAME' });
-                }}
-              >
-                <span className="arena-device-badge">
-                  <span className="arena-led def" />
-                  ТЕРМИНАЛ 03 · КОМАНДА БЕТА
-                </span>
-                <div>
-                  <h3>Рабочий пульт Команды БЕТА</h3>
-                  <p>
-                    Раунды 1 и 3 — проектирование защитного блока в коде. Раунды 2
-                    и 4 — поиск уязвимой строки и атака входными данными.
-                  </p>
-                </div>
-                <span className="arena-device-cta">
-                  Открыть пульт БЕТА →
-                </span>
-              </button>
-            </div>
-
-            {/* Спецификация 4 раундов */}
-            <div className="arena-rounds-preview">
+            <div className="arena-start-rounds">
               {ARENA_ROUNDS.map((r) => (
-                <div key={r.number} className="arena-round-mini">
-                  <div className="arena-round-mini-top">
-                    <span>РАУНД 0{r.number}</span>
-                    <span className="arena-round-mini-pts">
-                      {r.maxPoints} PTS
-                    </span>
+                <div key={r.number} className="arena-start-round-item">
+                  <div className="arena-start-round-meta">
+                    <span>Раунд {r.number}</span>
+                    <span>{r.maxPoints} очков</span>
                   </div>
-                  <h4>{r.title}</h4>
-                  <span style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
-                    {r.subtitle}
-                  </span>
-                  <code>{r.methodSignature}</code>
+                  <h3>{r.title}</h3>
+                  <span>{r.subtitle}</span>
                 </div>
               ))}
+            </div>
+
+            <div className="arena-actions-row">
+              <button
+                type="button"
+                className="arena-main-btn"
+                onClick={() => {
+                  setTurnStep('attack_turn');
+                  dispatch({ type: 'START_GAME' });
+                }}
+              >
+                Начать Раунд 1 →
+              </button>
             </div>
           </section>
         </main>
       )}
 
       {/* ====================================================================
-          ЭКРАН 1..4: РАБОЧАЯ СРЕДА РАУНДА (SPLIT-PANE IDE)
+          3. РАБОЧИЙ ЭКРАН РАУНДА: ТОЛЬКО 2 БЛОКА (КОД СЛЕВА + 1 ШАГ СПРАВА)
           ==================================================================== */}
       {state.stage === 'round' && (
-        <main className="arena-stage-main">
-          {/* Верхняя полоса контекста раунда */}
-          <section className="arena-round-banner">
-            <div
-              className="arena-timer-bar"
-              style={{
-                width: `${(state.timerSec / state.timerMaxSec) * 100}%`,
-              }}
-            />
-            <div className="arena-round-title-group">
-              <span className="arena-round-num-tag">
-                R0{currentRound.number} · {currentRound.maxPoints} ОЧКОВ
-              </span>
-              <div className="arena-round-heading">
-                <h2>
-                  {currentRound.title}{' '}
-                  <span style={{ color: 'var(--arena-text-muted)', fontWeight: 400 }}>
-                    / {currentRound.subtitle}
-                  </span>
-                </h2>
-                <p>{currentRound.engineeringNote}</p>
+        <main className="arena-workspace">
+          {/* ----------------------------------------------------------------
+              ЛЕВЫЙ БЛОК: ТОЛЬКО КРУПНЫЙ ЧИСТЫЙ КОД C# (БЕЗ ТАБЛИЦ И ДАТЧИКОВ)
+              ---------------------------------------------------------------- */}
+          <section className="arena-code-panel">
+            <div className="arena-code-header">
+              <div className="arena-code-header-top">
+                <span className="arena-code-title">
+                  Раунд {currentRound.number}. {currentRound.title}
+                </span>
+                <span className="arena-code-points">
+                  На кону: {currentRound.maxPoints} очков
+                </span>
               </div>
+              <span className="arena-code-subtitle">
+                {currentRound.subtitle}
+              </span>
             </div>
 
-            {/* Переключатель 4 последовательных состояний */}
-            <div className="arena-subphase-steps">
-              <button
-                type="button"
-                className={`arena-step-chip ${
-                  state.subPhase === 'planning' ? 'active' : ''
-                }`}
-                onClick={() => {
-                  soundEngine.playStepTick(state.soundEnabled);
-                  dispatch({
-                    type: 'SELECT_ROUND',
-                    roundNumber: state.roundNumber,
-                  });
-                }}
-              >
-                01 Постановка хода
-              </button>
-              <button
-                type="button"
-                className={`arena-step-chip ${
-                  state.subPhase === 'tracing' ? 'active' : ''
-                }`}
-                onClick={() => {
-                  soundEngine.playLockClick(state.soundEnabled);
-                  dispatch({ type: 'LAUNCH_CLASH' });
-                }}
-              >
-                02 Отладчик CLR
-              </button>
-              <button
-                type="button"
-                className={`arena-step-chip ${
-                  state.subPhase === 'roulette' ? 'active' : ''
-                }`}
-                onClick={() => {
-                  dispatch({ type: 'OPEN_ROULETTE' });
-                  triggerDrumSpin(state.roulettePlayerNum);
-                }}
-              >
-                03 Блиц-опрос
-              </button>
-              <button
-                type="button"
-                className={`arena-step-chip ${
-                  state.subPhase === 'summary' ? 'active' : ''
-                }`}
-                onClick={() => {
-                  soundEngine.playStepTick(state.soundEnabled);
-                  dispatch({ type: 'OPEN_SUMMARY' });
-                }}
-              >
-                04 Разбор кода
-              </button>
+            <div className="arena-code-lines">
+              {displayedCodeLines.map((lineObj) => {
+                const isActiveTrace =
+                  activeStep &&
+                  activeStep.activeLineNumber === lineObj.lineNumber;
+                const traceClass = isActiveTrace
+                  ? getStepTraceClass(activeStep?.stepKind)
+                  : '';
+                const isSkipped =
+                  (turnStep === 'result_view' ||
+                    turnStep === 'blitz_question') &&
+                  Boolean(
+                    activeStep?.skippedLineNumbers.includes(lineObj.lineNumber)
+                  );
+
+                return (
+                  <div
+                    key={`${lineObj.lineNumber}-${lineObj.code}`}
+                    className={`arena-line ${
+                      lineObj.isAddedPatch ? 'diff-added' : ''
+                    } ${traceClass} ${isSkipped ? 'line-skipped' : ''}`}
+                  >
+                    <span className="arena-line-ptr">
+                      {isActiveTrace ? <StepPointerIcon /> : null}
+                    </span>
+                    <span className="arena-line-number">
+                      {lineObj.isAddedPatch ? '+' : lineObj.lineNumber}
+                    </span>
+                    <span className="arena-line-code">
+                      <CSharpLineSyntax code={lineObj.code} />
+                    </span>
+                    <span>
+                      {isActiveTrace && activeStep?.inlineBadge && (
+                        <span className="arena-line-tag tag-step">
+                          {activeStep.inlineBadge}
+                        </span>
+                      )}
+                      {isSkipped && (
+                        <span className="arena-line-tag tag-skip">
+                          пропущено
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="arena-code-footer">
+              <span>
+                {previewDefenseId
+                  ? `В код вставлен вариант защиты (${
+                      currentRound.defenseOptions.find(
+                        (d) => d.id === previewDefenseId
+                      )?.codeLabel || previewDefenseId
+                    })`
+                  : 'Исходный код метода без защиты'}
+              </span>
+              {currentRound.number === 3 &&
+                (turnStep === 'result_view' ||
+                  turnStep === 'blitz_question') && (
+                  <strong>
+                    База данных:{' '}
+                    {simulation.finalDbState === 'CLOSED'
+                      ? 'Закрыта (db.Close выполнен)'
+                      : 'Утечка (осталась открытой!)'}
+                  </strong>
+                )}
             </div>
           </section>
 
-          {/* Двухколоночная сплит-сетка */}
-          <div className="arena-work-grid">
+          {/* ----------------------------------------------------------------
+              ПРАВЫЙ БЛОК: СТРОГО ОДИН ПРОСТОЙ ШАГ ЗА РАЗ
+              ---------------------------------------------------------------- */}
+          <section className="arena-step-panel">
             {/* ==============================================================
-                ЛЕВАЯ ПАНЕЛЬ: C# РЕДАКТОР + ЖИВОЙ ВЫЗОВ МЕТОДА + ОКНО LOCALS + ДАТЧИКИ
+                ШАГ 1 ИЗ 4: ХОД КОМАНДЫ АТАКИ (ТОЛЬКО 3 КНОПКИ)
                 ============================================================== */}
-            <section className="arena-ide-column">
-              <div className="arena-ide-window">
-                <div className="arena-ide-header">
-                  <div className="arena-ide-file">
-                    <span className="arena-ide-tab-indicator" />
-                    <span>ArenaService.cs — {currentRound.methodSignature}</span>
+            {turnStep === 'attack_turn' && (
+              <>
+                <div>
+                  <div className="arena-step-progress">
+                    Шаг 1 из 4 · Ход команды Атаки ({attackerTeamTitle})
                   </div>
-                  <span style={{ color: 'var(--arena-text-muted)' }}>
-                    {state.subPhase === 'planning'
-                      ? 'Шаг 1: выберите опасную строку кликом мыши'
-                      : previewDefenseId
-                      ? `Активный патч защиты: ${previewDefenseId}`
-                      : 'Исходный метод'}
-                  </span>
+                  <h2 className="arena-step-heading">
+                    Чем атакуем этот метод?
+                  </h2>
+                  <p className="arena-step-desc">
+                    Выберите входные данные, которые вызовут ошибку или сбой в
+                    коде слева:
+                  </p>
                 </div>
 
-                <div className="arena-ide-body">
-                  {displayedCodeLines.map((lineObj) => {
-                    const isActiveTrace =
-                      activeStep &&
-                      activeStep.activeLineNumber === lineObj.lineNumber;
-                    const traceClass = isActiveTrace
-                      ? getStepTraceClass(activeStep?.stepKind)
-                      : '';
-                    const isSkipped =
-                      state.subPhase !== 'planning' &&
-                      Boolean(
-                        activeStep?.skippedLineNumbers.includes(
-                          lineObj.lineNumber
-                        )
-                      );
-
-                    const isAtkTarget =
-                      state.subPhase === 'planning' &&
-                      state.attackTargetLine === lineObj.lineNumber;
-                    const isDefTarget =
-                      state.subPhase === 'planning' &&
-                      state.defenseTargetLine === lineObj.lineNumber;
-
+                <div className="arena-choices">
+                  {currentRound.attackOptions.map((atk) => {
+                    const isSelected = state.selectedAttackId === atk.id;
                     return (
-                      <div
-                        key={`${lineObj.lineNumber}-${lineObj.code}`}
-                        className={`arena-code-line ${
-                          lineObj.isAddedPatch ? 'diff-added' : ''
-                        } ${traceClass} ${isSkipped ? 'line-skipped' : ''} ${
-                          isAtkTarget ? 'target-attack' : ''
-                        } ${isDefTarget ? 'target-defense' : ''}`}
+                      <button
+                        key={atk.id}
+                        type="button"
+                        className={`arena-choice-btn ${
+                          isSelected ? 'selected-attack' : ''
+                        }`}
                         onClick={() => {
-                          if (state.subPhase !== 'planning') return;
                           soundEngine.playStepTick(state.soundEnabled);
-                          if (deviceRole === 'ALPHA') {
-                            if (attacker === 'ALPHA') {
-                              dispatch({
-                                type: 'PICK_ATTACK_LINE',
-                                line: lineObj.lineNumber,
-                              });
-                            } else {
-                              dispatch({
-                                type: 'PICK_DEFENSE_LINE',
-                                line: lineObj.lineNumber,
-                              });
-                            }
-                          } else if (deviceRole === 'BETA') {
-                            if (attacker === 'BETA') {
-                              dispatch({
-                                type: 'PICK_ATTACK_LINE',
-                                line: lineObj.lineNumber,
-                              });
-                            } else {
-                              dispatch({
-                                type: 'PICK_DEFENSE_LINE',
-                                line: lineObj.lineNumber,
-                              });
-                            }
-                          } else {
-                            dispatch({
-                              type: 'PICK_ATTACK_LINE',
-                              line: lineObj.lineNumber,
-                            });
-                            dispatch({
-                              type: 'PICK_DEFENSE_LINE',
-                              line: lineObj.lineNumber,
-                            });
-                          }
+                          dispatch({
+                            type: 'PICK_ATTACK_OPTION',
+                            optionId: atk.id,
+                          });
                         }}
                       >
-                        <span className="arena-gutter-marker">
-                          {isActiveTrace ? (
-                            <DebuggerPointerIcon />
-                          ) : isAtkTarget ? (
-                            <span className="arena-bp-dot atk" />
-                          ) : isDefTarget ? (
-                            <span className="arena-bp-dot def" />
-                          ) : null}
-                        </span>
-
-                        <span className="arena-line-num">
-                          {lineObj.isAddedPatch ? '+' : lineObj.lineNumber}
-                        </span>
-
-                        <span className="arena-line-text">
-                          <CSharpLineSyntax code={lineObj.code} />
-                        </span>
-
-                        <span className="arena-line-badges">
-                          {isAtkTarget && (
-                            <span className="arena-inline-badge target-badge-atk">
-                              ATK LINE {lineObj.lineNumber}
-                            </span>
-                          )}
-                          {isDefTarget && (
-                            <span className="arena-inline-badge target-badge-def">
-                              DEF LINE {lineObj.lineNumber}
-                            </span>
-                          )}
-                          {isActiveTrace && activeStep?.inlineBadge && (
-                            <span className="arena-inline-badge var-badge">
-                              {activeStep.inlineBadge}
-                            </span>
-                          )}
-                          {isSkipped && (
-                            <span className="arena-inline-badge skip-badge">
-                              ПРОПУЩЕНО
-                            </span>
-                          )}
-                        </span>
-                      </div>
+                        <div className="arena-choice-title">
+                          <span className="arena-choice-code">
+                            {atk.codeLabel}. {atk.payloadCode}
+                          </span>
+                          <span>Строка {atk.targetLine}</span>
+                        </div>
+                        <span className="arena-choice-sub">{atk.shortDesc}</span>
+                      </button>
                     );
                   })}
                 </div>
-              </div>
 
-              {/* ЖИВАЯ СТРОКА ВЫЗОВА C#-МЕТОДА СО СВОБОДНЫМ ВВОДОМ АРГУМЕНТОВ */}
-              <div className="arena-call-bar">
-                <div className="arena-call-expr">
-                  <span style={{ color: 'var(--arena-text-muted)' }}>
-                    ВЫЗОВ МЕТОДА:
-                  </span>
-                  {currentRound.number === 1 && (
-                    <>
-                      <span>CalculateUnitCost(countText: &quot;</span>
-                      <input
-                        type="text"
-                        className="arena-arg-input"
-                        value={customArgs.r1CountText}
-                        onChange={(e) => {
-                          setUseCustomEval(true);
-                          setCustomArgs({
-                            ...customArgs,
-                            r1CountText: e.target.value,
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') runCustomMethodCall();
-                        }}
-                        aria-label="Аргумент countText"
-                      />
-                      <span>&quot;, total:</span>
-                      <input
-                        type="text"
-                        className="arena-arg-input"
-                        style={{ width: '68px' }}
-                        value={customArgs.r1Total}
-                        onChange={(e) => {
-                          setUseCustomEval(true);
-                          setCustomArgs({
-                            ...customArgs,
-                            r1Total: e.target.value,
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') runCustomMethodCall();
-                        }}
-                        aria-label="Аргумент total"
-                      />
-                      <span>);</span>
-                    </>
-                  )}
-
-                  {currentRound.number === 2 && (
-                    <>
-                      <span>ApplyPromoBonus(promo:</span>
-                      <button
-                        type="button"
-                        className={`arena-arg-toggle ${
-                          customArgs.r2PromoIsNull ? 'is-null' : ''
-                        }`}
-                        onClick={() => {
-                          setUseCustomEval(true);
-                          setCustomArgs({
-                            ...customArgs,
-                            r2PromoIsNull: !customArgs.r2PromoIsNull,
-                          });
-                        }}
-                      >
-                        {customArgs.r2PromoIsNull
-                          ? 'null (клик -> строка)'
-                          : `"${customArgs.r2PromoText}"`}
-                      </button>
-                      <span>, slotIndex:</span>
-                      <input
-                        type="text"
-                        className="arena-arg-input"
-                        style={{ width: '58px' }}
-                        value={customArgs.r2SlotIndex}
-                        onChange={(e) => {
-                          setUseCustomEval(true);
-                          setCustomArgs({
-                            ...customArgs,
-                            r2SlotIndex: e.target.value,
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') runCustomMethodCall();
-                        }}
-                        aria-label="Аргумент slotIndex"
-                      />
-                      <span>);</span>
-                    </>
-                  )}
-
-                  {currentRound.number === 3 && (
-                    <>
-                      <span>ExecuteTransfer(db, amount:</span>
-                      <input
-                        type="text"
-                        className="arena-arg-input"
-                        style={{ width: '68px' }}
-                        value={customArgs.r3Amount}
-                        onChange={(e) => {
-                          setUseCustomEval(true);
-                          setCustomArgs({
-                            ...customArgs,
-                            r3Amount: e.target.value,
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') runCustomMethodCall();
-                        }}
-                        aria-label="Аргумент amount"
-                      />
-                      <span>, divisor:</span>
-                      <input
-                        type="text"
-                        className="arena-arg-input"
-                        style={{ width: '58px' }}
-                        value={customArgs.r3Divisor}
-                        onChange={(e) => {
-                          setUseCustomEval(true);
-                          setCustomArgs({
-                            ...customArgs,
-                            r3Divisor: e.target.value,
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') runCustomMethodCall();
-                        }}
-                        aria-label="Аргумент divisor"
-                      />
-                      <span>);</span>
-                    </>
-                  )}
-
-                  {currentRound.number === 4 && (
-                    <>
-                      <span>AuthorizeCard(pinInput: &quot;</span>
-                      <input
-                        type="text"
-                        className="arena-arg-input"
-                        style={{ width: '130px' }}
-                        value={customArgs.r4PinInput}
-                        onChange={(e) => {
-                          setUseCustomEval(true);
-                          setCustomArgs({
-                            ...customArgs,
-                            r4PinInput: e.target.value,
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') runCustomMethodCall();
-                        }}
-                        aria-label="Аргумент pinInput"
-                      />
-                      <span>&quot;, auditLog);</span>
-                    </>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  className="arena-icon-btn"
-                  onClick={runCustomMethodCall}
-                  title="Запустить метод с введёнными вручную аргументами"
-                >
-                  Проверить этот ввод →
-                </button>
-              </div>
-
-              {/* ЖИВАЯ ТАБЛИЦА ЛОКАЛЬНЫХ ПЕРЕМЕННЫХ ОТЛАДЧИКА (LOCALS / WATCH) */}
-              <div className="arena-locals-pane">
-                <div className="arena-locals-header">
-                  <span>LOCALS // ИМЯ</span>
-                  <span>ТЕКУЩЕЕ ЗНАЧЕНИЕ В ПАМЯТИ CLR</span>
-                  <span style={{ textAlign: 'right' }}>ТИП C#</span>
-                </div>
-                {localsRows.map((row) => (
-                  <div
-                    key={row.name}
-                    className={`arena-locals-row ${
-                      row.isFault
-                        ? 'is-fault'
-                        : row.changed
-                        ? 'is-changed'
-                        : ''
-                    }`}
-                  >
-                    <span className="arena-locals-name">
-                      <span
-                        className={`arena-led ${
-                          row.isFault ? 'bad' : row.changed ? 'warn' : ''
-                        }`}
-                      />
-                      {row.name}
-                    </span>
-                    <span className="arena-locals-val" title={row.value}>
-                      {row.value}
-                    </span>
-                    <span className="arena-locals-type">{row.type}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* НИЖНИЙ ДОК ТЕЛЕМЕТРИИ СРЕДЫ CLR */}
-              <div className="arena-telemetry-dock">
-                <div className="arena-sensors-row">
-                  <div
-                    className={`arena-sensor-card ${
-                      state.subPhase === 'planning'
-                        ? ''
-                        : simulation.finalDbState === 'LEAK'
-                        ? 'status-bad'
-                        : 'status-good'
-                    }`}
-                  >
-                    <div className="arena-sensor-label">
-                      <span>01 / DB_CONNECTION</span>
-                      <span>IDisposable</span>
-                    </div>
-                    <div className="arena-sensor-value">
-                      <span
-                        className={`arena-led ${
-                          state.subPhase === 'planning'
-                            ? ''
-                            : simulation.finalDbState === 'LEAK'
-                            ? 'bad'
-                            : 'ok'
-                        }`}
-                      />
-                      <span>
-                        {state.subPhase === 'planning'
-                          ? 'STANDBY (не открыто)'
-                          : simulation.finalDbState === 'LEAK'
-                          ? 'LEAKED (соединение зависло)'
-                          : 'CLOSED (освобождено штатно)'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`arena-sensor-card ${
-                      state.subPhase === 'planning'
-                        ? ''
-                        : simulation.finalLogState === 'SWALLOWED'
-                        ? 'status-bad'
-                        : simulation.finalLogState === 'LOGGED'
-                        ? 'status-good'
-                        : ''
-                    }`}
-                  >
-                    <div className="arena-sensor-label">
-                      <span>02 / AUDIT_LOG</span>
-                      <span>ex.Message</span>
-                    </div>
-                    <div className="arena-sensor-value">
-                      <span
-                        className={`arena-led ${
-                          state.subPhase === 'planning'
-                            ? ''
-                            : simulation.finalLogState === 'SWALLOWED'
-                            ? 'bad'
-                            : simulation.finalLogState === 'LOGGED'
-                            ? 'ok'
-                            : ''
-                        }`}
-                      />
-                      <span>
-                        {state.subPhase === 'planning'
-                          ? 'STANDBY (записей: 0)'
-                          : simulation.finalLogState === 'SWALLOWED'
-                          ? 'SILENT_DROP (ошибка скрыта)'
-                          : simulation.finalLogState === 'LOGGED'
-                          ? 'WRITTEN (событие записано)'
-                          : 'NO_ERROR (штатный возврат)'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`arena-sensor-card ${
-                      state.subPhase === 'planning'
-                        ? ''
-                        : simulation.finalStackState === 'RESET'
-                        ? 'status-warn'
-                        : simulation.outcome === 'BREACHED'
-                        ? 'status-bad'
-                        : 'status-good'
-                    }`}
-                  >
-                    <div className="arena-sensor-label">
-                      <span>03 / CALL_STACK</span>
-                      <span>StackTrace</span>
-                    </div>
-                    <div className="arena-sensor-value">
-                      <span
-                        className={`arena-led ${
-                          state.subPhase === 'planning'
-                            ? ''
-                            : simulation.finalStackState === 'RESET'
-                            ? 'warn'
-                            : simulation.outcome === 'BREACHED'
-                            ? 'bad'
-                            : 'ok'
-                        }`}
-                      />
-                      <span>
-                        {state.subPhase === 'planning'
-                          ? 'STANDBY (стек чист)'
-                          : simulation.finalStackState === 'RESET'
-                          ? 'RESET_CA2200 (стёрт через throw ex)'
-                          : simulation.outcome === 'BREACHED'
-                          ? 'UNHANDLED_FAULT (аварийный выход)'
-                          : 'INTACT (исходная строка сохранена)'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            {/* ==============================================================
-                ПРАВАЯ ПАНЕЛЬ: КОНТРОЛЛЕР АКТИВНОЙ ФАЗЫ РАУНДА
-                ============================================================== */}
-            <section className="arena-phase-column">
-              {/* ------------------------------------------------------------
-                  ВАРИАНТ 1: ПУЛЬТ КОМАНДНОГО НОУТБУКА (АЛЬФА / БЕТА)
-                  ------------------------------------------------------------ */}
-              {state.subPhase === 'planning' && laptopTeamId && (
-                <div className="arena-phase-panel">
-                  <div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '10px',
-                      }}
-                    >
-                      <span className="arena-device-badge">
-                        <span
-                          className={`arena-led ${
-                            isLaptopAttacker ? 'atk' : 'def'
-                          }`}
-                        />
-                        {isLaptopAttacker
-                          ? `КОМАНДА ${
-                              laptopTeamId === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'
-                            } // РОЛЬ: АТАКА`
-                          : `КОМАНДА ${
-                              laptopTeamId === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'
-                            } // РОЛЬ: ЗАЩИТА`}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: 'var(--arena-font-mono)',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        Пул раунда: {currentRound.maxPoints} очк.
-                      </span>
-                    </div>
-
-                    {/* Трёхшаговый регламент для 6 участников за одним ноутбуком */}
-                    <div className="arena-role-chain-steps">
-                      <div
-                        className={`arena-chain-box ${
-                          (
-                            isLaptopAttacker
-                              ? state.attackTargetLine
-                              : state.defenseTargetLine
-                          )
-                            ? 'done'
-                            : 'active'
-                        }`}
-                      >
-                        <strong>Шаг 01 · Участники 1–2</strong>
-                        <div>
-                          {(
-                            isLaptopAttacker
-                              ? state.attackTargetLine
-                              : state.defenseTargetLine
-                          )
-                            ? `Выбрана строка #${
-                                isLaptopAttacker
-                                  ? state.attackTargetLine
-                                  : state.defenseTargetLine
-                              }`
-                            : 'Укажите опасную строку в коде слева'}
-                        </div>
-                      </div>
-
-                      <div
-                        className={`arena-chain-box ${
-                          (
-                            isLaptopAttacker
-                              ? state.selectedAttackId
-                              : state.selectedDefenseId
-                          )
-                            ? 'done'
-                            : 'active'
-                        }`}
-                      >
-                        <strong>Шаг 02 · Участники 3–4</strong>
-                        <div>
-                          {(
-                            isLaptopAttacker
-                              ? state.selectedAttackId
-                              : state.selectedDefenseId
-                          )
-                            ? `Выбран вариант ${
-                                isLaptopAttacker
-                                  ? state.selectedAttackId
-                                  : state.selectedDefenseId
-                              }`
-                            : isLaptopAttacker
-                            ? 'Выберите входной пакет А-1..А-3'
-                            : 'Выберите патч защиты З-1..З-4'}
-                        </div>
-                      </div>
-
-                      <div
-                        className={`arena-chain-box ${
-                          (
-                            isLaptopAttacker
-                              ? state.attackLocked
-                              : state.defenseLocked
-                          )
-                            ? 'done'
-                            : ''
-                        }`}
-                      >
-                        <strong>Шаг 03 · Участники 5–6</strong>
-                        <div>
-                          {(
-                            isLaptopAttacker
-                              ? state.attackLocked
-                              : state.defenseLocked
-                          )
-                            ? 'Решение зафиксировано'
-                            : 'Проверьте решение и зафиксируйте ход'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {isLaptopAttacker ? (
-                    <div className="arena-voice-section">
-                      <div className="arena-voice-group-label">
-                        <span>Входные данные для вызова метода (Атака)</span>
-                        <span>Коды А-1 .. А-3</span>
-                      </div>
-                      <div className="arena-cards-list">
-                        {currentRound.attackOptions.map((atk) => (
-                          <button
-                            key={atk.id}
-                            type="button"
-                            className={`arena-option-card ${
-                              state.selectedAttackId === atk.id
-                                ? 'selected-atk'
-                                : ''
-                            }`}
-                            onClick={() => {
-                              soundEngine.playStepTick(state.soundEnabled);
-                              dispatch({
-                                type: 'PICK_ATTACK_OPTION',
-                                optionId: atk.id,
-                              });
-                            }}
-                          >
-                            <div className="arena-option-left">
-                              <span className="arena-voice-code atk">
-                                {atk.codeLabel}
-                              </span>
-                              <div className="arena-option-text">
-                                <span className="arena-option-title">
-                                  <code>{atk.payloadCode}</code>
-                                </span>
-                                <span className="arena-option-code">
-                                  Строка #{atk.targetLine} · Ожидается:{' '}
-                                  {atk.expectedException} ({atk.shortDesc})
-                                </span>
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="arena-voice-section">
-                      <div className="arena-voice-group-label">
-                        <span>Варианты обработки в коде (Защита)</span>
-                        <span>Предпросмотр в редакторе слева</span>
-                      </div>
-                      <div className="arena-cards-list">
-                        {currentRound.defenseOptions.map((def) => (
-                          <button
-                            key={def.id}
-                            type="button"
-                            className={`arena-option-card ${
-                              state.selectedDefenseId === def.id
-                                ? 'selected-def'
-                                : ''
-                            }`}
-                            onClick={() => {
-                              soundEngine.playStepTick(state.soundEnabled);
-                              dispatch({
-                                type: 'PICK_DEFENSE_OPTION',
-                                optionId: def.id,
-                              });
-                            }}
-                          >
-                            <div className="arena-option-left">
-                              <span className="arena-voice-code def">
-                                {def.codeLabel}
-                              </span>
-                              <div className="arena-option-text">
-                                <span className="arena-option-title">
-                                  {def.title}
-                                </span>
-                                <span className="arena-option-code">
-                                  {def.shortDesc}
-                                </span>
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
+                <div className="arena-actions-row">
                   <button
                     type="button"
-                    className="arena-primary-cta"
+                    className="arena-main-btn attack-btn"
+                    disabled={!state.selectedAttackId}
                     onClick={() => {
                       soundEngine.playLockClick(state.soundEnabled);
-                      dispatch({
-                        type: isLaptopAttacker
-                          ? 'TOGGLE_ATTACK_LOCK'
-                          : 'TOGGLE_DEFENSE_LOCK',
-                      });
+                      setTurnStep('defense_turn');
                     }}
                   >
-                    {(
-                      isLaptopAttacker ? state.attackLocked : state.defenseLocked
-                    )
-                      ? 'Снять фиксацию (изменить вариант)'
-                      : 'Зафиксировать командный ход'}
+                    Запомнить атаку и передать ход Защите →
                   </button>
                 </div>
-              )}
+              </>
+            )}
 
-              {/* ------------------------------------------------------------
-                  ВАРИАНТ 2: ЭКРАН ДОСКИ / ПРОЕКТОРА В ФАЗЕ ПОСТАНОВКИ ХОДА
-                  ------------------------------------------------------------ */}
-              {state.subPhase === 'planning' && !laptopTeamId && (
-                <div className="arena-phase-panel">
-                  <div className="arena-envelopes-grid">
-                    <div className="arena-envelope-box atk">
-                      <div className="arena-envelope-top">
-                        <span>
-                          АТАКА // {attacker === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'}
-                        </span>
-                        <span
-                          className={`arena-lock-badge ${
-                            state.attackLocked ? 'locked' : 'waiting'
-                          }`}
-                        >
-                          <span
-                            className={`arena-led ${
-                              state.attackLocked ? 'ok' : 'warn'
-                            }`}
-                          />
-                          {state.attackLocked ? 'ГОТОВО' : 'ВЫБОР ХОДА'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
-                        {state.attackLocked
-                          ? 'Вектор атаки зафиксирован и скрыт до запуска'
-                          : 'Команда выбирает строку и входной пакет А-1..А-3'}
-                      </div>
-                    </div>
-
-                    <div className="arena-envelope-box def">
-                      <div className="arena-envelope-top">
-                        <span>
-                          ЗАЩИТА // {defender === 'ALPHA' ? 'АЛЬФА' : 'БЕТА'}
-                        </span>
-                        <span
-                          className={`arena-lock-badge ${
-                            state.defenseLocked ? 'locked' : 'waiting'
-                          }`}
-                        >
-                          <span
-                            className={`arena-led ${
-                              state.defenseLocked ? 'ok' : 'warn'
-                            }`}
-                          />
-                          {state.defenseLocked ? 'ГОТОВО' : 'ВЫБОР ХОДА'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
-                        {state.defenseLocked
-                          ? 'Конструкция защиты готова к компиляции'
-                          : 'Команда выбирает блок обработки З-1..З-4'}
-                      </div>
-                    </div>
+            {/* ==============================================================
+                ШАГ 2 ИЗ 4: ХОД КОМАНДЫ ЗАЩИТЫ (ТОЛЬКО 4 КНОПКИ + ПРЕВЬЮ В КОДЕ)
+                ============================================================== */}
+            {turnStep === 'defense_turn' && (
+              <>
+                <div>
+                  <div className="arena-step-progress">
+                    Шаг 2 из 4 · Ход команды Защиты ({defenderTeamTitle})
                   </div>
+                  <h2 className="arena-step-heading">
+                    Как защитить метод от сбоя?
+                  </h2>
+                  <p className="arena-step-desc">
+                    Нажмите на вариант, чтобы сразу увидеть его в коде слева, и
+                    запустите проверку:
+                  </p>
+                </div>
 
-                  {/* Ввод кодов А-1..А-3 */}
-                  <div className="arena-voice-section">
-                    <div className="arena-voice-group-label">
-                      <span>Входные данные (Атака)</span>
-                      <span>
-                        {state.attackTargetLine
-                          ? `Цель: строка #${state.attackTargetLine}`
-                          : 'Кликните строку в коде или выберите код'}
-                      </span>
-                    </div>
-                    <div className="arena-cards-list">
-                      {currentRound.attackOptions.map((atk) => (
-                        <button
-                          key={atk.id}
-                          type="button"
-                          className={`arena-option-card ${
-                            state.selectedAttackId === atk.id
-                              ? 'selected-atk'
-                              : ''
-                          }`}
-                          onClick={() => {
-                            soundEngine.playStepTick(state.soundEnabled);
-                            dispatch({
-                              type: 'PICK_ATTACK_OPTION',
-                              optionId: atk.id,
-                              lockImmediately: true,
-                            });
-                          }}
-                        >
-                          <div className="arena-option-left">
-                            <span className="arena-voice-code atk">
-                              {atk.codeLabel}
-                            </span>
-                            <div className="arena-option-text">
-                              <span className="arena-option-title">
-                                <code>{atk.payloadCode}</code>
-                              </span>
-                              <span className="arena-option-code">
-                                Строка #{atk.targetLine} · {atk.expectedException}{' '}
-                                ({atk.shortDesc})
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                <div className="arena-choices">
+                  {currentRound.defenseOptions.map((def) => {
+                    const isSelected = state.selectedDefenseId === def.id;
+                    return (
+                      <button
+                        key={def.id}
+                        type="button"
+                        className={`arena-choice-btn ${
+                          isSelected ? 'selected-defense' : ''
+                        }`}
+                        onClick={() => {
+                          soundEngine.playStepTick(state.soundEnabled);
+                          dispatch({
+                            type: 'PICK_DEFENSE_OPTION',
+                            optionId: def.id,
+                          });
+                        }}
+                      >
+                        <div className="arena-choice-title">
+                          <span>
+                            {def.codeLabel}. {def.title}
+                          </span>
+                        </div>
+                        <span className="arena-choice-sub">{def.shortDesc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-                  {/* Ввод кодов З-1..З-4 */}
-                  <div className="arena-voice-section">
-                    <div className="arena-voice-group-label">
-                      <span>Обработка исключений (Защита)</span>
-                      <span>Коды З-1 .. З-4</span>
-                    </div>
-                    <div className="arena-cards-list">
-                      {currentRound.defenseOptions.map((def) => (
-                        <button
-                          key={def.id}
-                          type="button"
-                          className={`arena-option-card ${
-                            state.selectedDefenseId === def.id
-                              ? 'selected-def'
-                              : ''
-                          }`}
-                          onClick={() => {
-                            soundEngine.playStepTick(state.soundEnabled);
-                            dispatch({
-                              type: 'PICK_DEFENSE_OPTION',
-                              optionId: def.id,
-                              lockImmediately: true,
-                            });
-                          }}
-                        >
-                          <div className="arena-option-left">
-                            <span className="arena-voice-code def">
-                              {def.codeLabel}
-                            </span>
-                            <div className="arena-option-text">
-                              <span className="arena-option-title">
-                                {def.title}
-                              </span>
-                              <span className="arena-option-code">
-                                {def.shortDesc}
-                              </span>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
+                <div className="arena-actions-row">
                   <button
                     type="button"
-                    className="arena-primary-cta"
+                    className="arena-back-btn"
+                    onClick={() => setTurnStep('attack_turn')}
+                  >
+                    ← Назад к Атаке
+                  </button>
+                  <button
+                    type="button"
+                    className="arena-main-btn"
+                    disabled={!state.selectedDefenseId}
                     onClick={() => {
                       soundEngine.playLockClick(state.soundEnabled);
                       dispatch({ type: 'LAUNCH_CLASH' });
+                      setTurnStep('result_view');
                     }}
                   >
-                    <kbd
-                      className="arena-kbd"
-                      style={{
-                        background: 'rgba(0,0,0,0.25)',
-                        color: '#fff',
-                        borderColor: 'rgba(255,255,255,0.35)',
-                      }}
-                    >
-                      F5
-                    </kbd>
-                    <span>Скомпилировать патч и выполнить метод</span>
+                    Запустить проверку кода →
                   </button>
                 </div>
-              )}
+              </>
+            )}
 
-              {/* ------------------------------------------------------------
-                  ФАЗА 2: ПОШАГОВЫЙ ОТЛАДЧИК CLR (TRACING)
-                  ------------------------------------------------------------ */}
-              {state.subPhase === 'tracing' && activeStep && (
-                <div className="arena-phase-panel">
-                  <div className="arena-envelopes-grid">
-                    <div className="arena-envelope-box atk">
-                      <div className="arena-envelope-top">
-                        <span>ПАКЕТ АТАКИ</span>
-                        <span className="arena-voice-code atk">
-                          {useCustomEval
-                            ? 'СВОЙ ВВОД'
-                            : currentRound.attackOptions.find(
-                                (a) => a.id === activeAttackId
-                              )?.codeLabel}
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          fontFamily: 'var(--arena-font-mono)',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {useCustomEval
-                          ? 'Произвольные аргументы из строки вызова'
-                          : currentRound.attackOptions.find(
-                              (a) => a.id === activeAttackId
-                            )?.payloadCode}
-                      </div>
+            {/* ==============================================================
+                ШАГ 3 ИЗ 4: РЕЗУЛЬТАТ И ПОШАГОВЫЙ ПРОСМОТР СТРОК
+                ============================================================== */}
+            {turnStep === 'result_view' && activeStep && (
+              <>
+                <div>
+                  <div className="arena-step-progress">
+                    Шаг 3 из 4 · Результат выполнения метода
+                  </div>
+                  <div
+                    className={`arena-result-box ${simulation.outcome}`}
+                    style={{ marginTop: '10px' }}
+                  >
+                    <div className="arena-result-title">
+                      {simulation.headline}
                     </div>
-
-                    <div className="arena-envelope-box def">
-                      <div className="arena-envelope-top">
-                        <span>ПАТЧ ЗАЩИТЫ</span>
-                        <span className="arena-voice-code def">
-                          {
-                            currentRound.defenseOptions.find(
-                              (d) => d.id === activeDefenseId
-                            )?.codeLabel
-                          }
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '12px', fontWeight: 700 }}>
-                        {
-                          currentRound.defenseOptions.find(
-                            (d) => d.id === activeDefenseId
-                          )?.title
-                        }
-                      </div>
+                    <div className="arena-result-text">
+                      {simulation.reasonDetailed}
                     </div>
                   </div>
+                </div>
 
-                  <div className="arena-trace-explanation">
-                    <div className="arena-trace-step-header">
-                      <span>
-                        ШАГ ОТЛАДЧИКА {state.traceStepIdx + 1} /{' '}
-                        {simulation.steps.length} · СТРОКА #
-                        {activeStep.activeLineNumber}
-                      </span>
-                      <span>{activeStep.inlineBadge}</span>
-                    </div>
-                    <div className="arena-trace-comment">
-                      {activeStep.statusBanner}
-                    </div>
+                <div className="arena-trace-box">
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Пошаговый ход по строкам ({state.traceStepIdx + 1} из{' '}
+                    {simulation.steps.length} · строка #
+                    {activeStep.activeLineNumber})
                   </div>
-
-                  {activeStep.skippedLineNumbers.length > 0 && (
-                    <div className="arena-rule-card">
-                      <h4>Невыполненные инструкции внутри блока try</h4>
-                      <p>
-                        После генерации исключения строки{' '}
-                        <code>
-                          #{activeStep.skippedLineNumbers.join(', #')}
-                        </code>{' '}
-                        в блоке <code>try</code> пропускаются: среда CLR сразу
-                        разворачивает стек к подходящему блоку <code>catch</code>{' '}
-                        и секции <code>finally</code>.
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="arena-trace-controls">
+                  <div style={{ fontSize: '15px', fontWeight: 600 }}>
+                    {activeStep.statusBanner}
+                  </div>
+                  <div className="arena-actions-row" style={{ marginTop: '4px' }}>
                     <button
                       type="button"
-                      className="arena-secondary-btn"
+                      className="arena-back-btn"
+                      style={{ flex: 1, padding: '10px' }}
                       disabled={state.traceStepIdx === 0}
                       onClick={() => {
-                        soundEngine.playStepTick(state.soundEnabled, 0.85);
+                        soundEngine.playStepTick(state.soundEnabled);
                         dispatch({
                           type: 'STEP_TRACE',
                           stepIdx: Math.max(0, state.traceStepIdx - 1),
                         });
                       }}
                     >
-                      <kbd className="arena-kbd">←</kbd>
-                      <span>Предыдущий шаг</span>
+                      ← Предыдущая строка
                     </button>
                     <button
                       type="button"
-                      className="arena-secondary-btn"
+                      className="arena-back-btn"
+                      style={{ flex: 1, padding: '10px' }}
                       disabled={
                         state.traceStepIdx >= simulation.steps.length - 1
                       }
                       onClick={() => {
-                        const nextIdx = Math.min(
-                          simulation.steps.length - 1,
-                          state.traceStepIdx + 1
-                        );
-                        const nextStep = simulation.steps[nextIdx];
-                        if (
-                          nextStep?.stepKind === 'explode' ||
-                          nextStep?.stepKind === 'compile_error' ||
-                          nextStep?.stepKind === 'leak'
-                        ) {
-                          soundEngine.playExceptionInterrupt(state.soundEnabled);
-                        } else {
-                          soundEngine.playStepTick(state.soundEnabled);
-                        }
+                        soundEngine.playStepTick(state.soundEnabled);
                         dispatch({
                           type: 'STEP_TRACE',
-                          stepIdx: nextIdx,
+                          stepIdx: Math.min(
+                            simulation.steps.length - 1,
+                            state.traceStepIdx + 1
+                          ),
                         });
                       }}
                     >
-                      <span>Следующий шаг (Step Over)</span>
-                      <kbd className="arena-kbd">→</kbd>
+                      Следующая строка →
+                    </button>
+                  </div>
+                </div>
+
+                <div className="arena-rule-takeaway">
+                  <strong>{currentRound.ruleTitle}:</strong>{' '}
+                  {currentRound.ruleSummary}
+                </div>
+
+                <div className="arena-actions-row">
+                  <button
+                    type="button"
+                    className="arena-back-btn"
+                    onClick={() => setTurnStep('defense_turn')}
+                  >
+                    ← Другой вариант
+                  </button>
+                  <button
+                    type="button"
+                    className="arena-main-btn"
+                    onClick={() => {
+                      dispatch({ type: 'OPEN_ROULETTE' });
+                      setTurnStep('blitz_question');
+                      spinPlayerNumber();
+                    }}
+                  >
+                    Блиц-вопрос игроку (+{Math.round(currentRound.maxPoints / 2)}{' '}
+                    очк.) →
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ==============================================================
+                ШАГ 4 ИЗ 4: КОНТРОЛЬНЫЙ ВОПРОС СЛУЧАЙНОМУ УЧАСТНИКУ (1..6)
+                ============================================================== */}
+            {turnStep === 'blitz_question' && (
+              <>
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <span className="arena-step-progress">
+                      Шаг 4 из 4 · Контрольный вопрос (+
+                      {Math.round(currentRound.maxPoints / 2)} очков)
+                    </span>
+                    <button
+                      type="button"
+                      className="arena-quiet-btn"
+                      disabled={spinningPlayer}
+                      onClick={spinPlayerNumber}
+                    >
+                      {spinningPlayer ? 'Выбор...' : 'Выбрать другой номер'}
                     </button>
                   </div>
 
-                  <button
-                    type="button"
-                    className="arena-primary-cta"
-                    onClick={() => {
-                      dispatch({ type: 'OPEN_ROULETTE' });
-                      triggerDrumSpin(state.roulettePlayerNum);
-                    }}
-                  >
-                    Перейти к контрольному блиц-опросу (+
-                    {Math.round(currentRound.maxPoints / 2)} очк.)
-                  </button>
-                </div>
-              )}
-
-              {/* ------------------------------------------------------------
-                  ФАЗА 3: МЕХАНИЧЕСКИЙ СЕЛЕКТОР ОТВЕЧАЮЩЕГО (01..06)
-                  ------------------------------------------------------------ */}
-              {state.subPhase === 'roulette' && (
-                <div className="arena-phase-panel">
-                  <div className="arena-roulette-box">
-                    <div className="arena-roulette-header">
-                      <div>
-                        <div
-                          className="arena-eyebrow"
-                          style={{ marginBottom: '2px' }}
-                        >
-                          КОНТРОЛЬ ПОНИМАНИЯ КОДА (БЕЗ ПОДСКАЗОК КОМАНДЫ)
-                        </div>
-                        <div style={{ fontSize: '13px', fontWeight: 700 }}>
-                          Отвечает Участник №0{drumDisplaySlot} · На кону вторые
-                          50% очков раунда (+
-                          {Math.round(currentRound.maxPoints / 2)} очк.)
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="arena-icon-btn"
-                        disabled={drumSpinning}
-                        onClick={() => triggerDrumSpin()}
+                  <div className="arena-player-row" style={{ margin: '12px 0' }}>
+                    {[1, 2, 3, 4, 5, 6].map((num) => (
+                      <div
+                        key={num}
+                        className={`arena-player-slot ${
+                          displayedPlayer === num ? 'active' : ''
+                        }`}
                       >
-                        {drumSpinning ? 'Выбор...' : 'Выбрать случайный №'}
-                      </button>
-                    </div>
-
-                    {/* Живая 6-секционная шкала выбора участника 01..06 */}
-                    <div className="arena-drum-strip">
-                      {[1, 2, 3, 4, 5, 6].map((num) => (
-                        <div
-                          key={num}
-                          className={`arena-drum-slot ${
-                            drumDisplaySlot === num ? 'active-slot' : ''
-                          }`}
-                        >
-                          УЧ. 0{num}
-                        </div>
-                      ))}
-                    </div>
-
-                    <p className="arena-roulette-question">
-                      {currentRound.rouletteQuestion.prompt}
-                    </p>
-
-                    <div className="arena-roulette-options">
-                      {currentRound.rouletteQuestion.options.map((opt) => {
-                        const isPicked =
-                          state.rouletteSelectedOptionId === opt.id;
-                        const showResult = Boolean(
-                          state.rouletteSelectedOptionId
-                        );
-                        const btnClass = showResult
-                          ? opt.isCorrect
-                            ? 'correct'
-                            : isPicked
-                            ? 'wrong'
-                            : ''
-                          : '';
-
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            className={`arena-roulette-opt-btn ${btnClass}`}
-                            onClick={() => {
-                              if (opt.isCorrect) {
-                                soundEngine.playVerifiedTone(state.soundEnabled);
-                              } else {
-                                soundEngine.playExceptionInterrupt(
-                                  state.soundEnabled
-                                );
-                              }
-                              dispatch({
-                                type: 'ANSWER_ROULETTE',
-                                optionId: opt.id,
-                              });
-                            }}
-                          >
-                            <span className="arena-voice-code def">
-                              {opt.id}
-                            </span>
-                            <div style={{ flex: 1 }}>
-                              <div>{opt.text}</div>
-                              {showResult && (isPicked || opt.isCorrect) && (
-                                <div
-                                  style={{
-                                    fontSize: '12px',
-                                    marginTop: '4px',
-                                    color: 'var(--arena-text-muted)',
-                                  }}
-                                >
-                                  {opt.explanation}
-                                </div>
-                              )}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                        Игрок {num}
+                      </div>
+                    ))}
                   </div>
 
+                  <h2 className="arena-step-heading" style={{ fontSize: '18px' }}>
+                    Отвечает Игрок №{displayedPlayer}:{' '}
+                    {currentRound.rouletteQuestion.prompt}
+                  </h2>
+                </div>
+
+                <div className="arena-choices">
+                  {currentRound.rouletteQuestion.options.map((opt) => {
+                    const isPicked = state.rouletteSelectedOptionId === opt.id;
+                    const answered = Boolean(state.rouletteSelectedOptionId);
+                    const statusClass = answered
+                      ? opt.isCorrect
+                        ? 'correct'
+                        : isPicked
+                        ? 'wrong'
+                        : ''
+                      : '';
+
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        className={`arena-choice-btn ${statusClass}`}
+                        onClick={() => {
+                          if (opt.isCorrect) {
+                            soundEngine.playVerifiedTone(state.soundEnabled);
+                          } else {
+                            soundEngine.playExceptionInterrupt(state.soundEnabled);
+                          }
+                          dispatch({
+                            type: 'ANSWER_ROULETTE',
+                            optionId: opt.id,
+                          });
+                        }}
+                      >
+                        <div className="arena-choice-title">
+                          <span>{opt.text}</span>
+                        </div>
+                        {answered && (isPicked || opt.isCorrect) && (
+                          <span className="arena-choice-sub">
+                            {opt.explanation}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="arena-actions-row">
                   <button
                     type="button"
-                    className="arena-primary-cta"
-                    onClick={() => {
-                      soundEngine.playStepTick(state.soundEnabled);
-                      dispatch({ type: 'OPEN_SUMMARY' });
-                    }}
+                    className="arena-back-btn"
+                    onClick={() => setTurnStep('result_view')}
                   >
-                    Открыть инженерный разбор раунда
+                    ← К разбору кода
                   </button>
-                </div>
-              )}
-
-              {/* ------------------------------------------------------------
-                  ФАЗА 4: ИТОГ РАУНДА + ПРАВИЛО C# + ПРОВЕРКА СЦЕНАРИЕВ
-                  ------------------------------------------------------------ */}
-              {state.subPhase === 'summary' && (
-                <div className="arena-phase-panel">
-                  <div className={`arena-verdict-banner ${simulation.outcome}`}>
-                    <div className="arena-verdict-title">
-                      {simulation.headline}
-                    </div>
-                    <div style={{ fontSize: '13px', lineHeight: 1.45 }}>
-                      {simulation.reasonDetailed}
-                    </div>
-                  </div>
-
-                  <div className="arena-rule-card">
-                    <h4>{currentRound.ruleTitle}</h4>
-                    <p>{currentRound.ruleSummary}</p>
-                  </div>
-
-                  {/* Живое сравнение альтернативных вариантов прямо в редакторе слева */}
-                  <div className="arena-voice-section">
-                    <div className="arena-voice-group-label">
-                      <span>Проверка других комбинаций в редакторе слева</span>
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '5px',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      {currentRound.attackOptions.map((atk) => (
-                        <button
-                          key={atk.id}
-                          type="button"
-                          className={`arena-pill-btn ${
-                            !useCustomEval && activeAttackId === atk.id
-                              ? 'active'
-                              : ''
-                          }`}
-                          onClick={() => {
-                            soundEngine.playStepTick(state.soundEnabled);
-                            setUseCustomEval(false);
-                            dispatch({
-                              type: 'SET_SANDBOX_VARIANT',
-                              attackId: atk.id,
-                            });
-                          }}
-                        >
-                          {atk.codeLabel}: {atk.payloadCode}
-                        </button>
-                      ))}
-                    </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: '5px',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      {currentRound.defenseOptions.map((def) => (
-                        <button
-                          key={def.id}
-                          type="button"
-                          className={`arena-pill-btn ${
-                            activeDefenseId === def.id ? 'active' : ''
-                          }`}
-                          onClick={() => {
-                            soundEngine.playStepTick(state.soundEnabled);
-                            dispatch({
-                              type: 'SET_SANDBOX_VARIANT',
-                              defenseId: def.id,
-                            });
-                          }}
-                        >
-                          {def.codeLabel}: {def.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   {state.roundNumber < 4 ? (
                     <button
                       type="button"
-                      className="arena-primary-cta"
+                      className="arena-main-btn"
                       onClick={() => {
-                        soundEngine.playLockClick(state.soundEnabled);
+                        setTurnStep('attack_turn');
                         dispatch({
                           type: 'SELECT_ROUND',
                           roundNumber: (state.roundNumber + 1) as RoundNumber,
                         });
                       }}
                     >
-                      Перейти к Раунду 0{state.roundNumber + 1} (смена ролей
-                      команд)
+                      Перейти к Раунду {state.roundNumber + 1} →
                     </button>
                   ) : (
                     <button
                       type="button"
-                      className="arena-primary-cta"
-                      onClick={() => {
-                        soundEngine.playVerifiedTone(state.soundEnabled);
-                        dispatch({ type: 'GO_TO_FINALE' });
-                      }}
+                      className="arena-main-btn"
+                      onClick={() => dispatch({ type: 'GO_TO_FINALE' })}
                     >
-                      Открыть итоговую сводку и эталонный код C#
+                      Подвести итоги игры →
                     </button>
                   )}
                 </div>
-              )}
-            </section>
-          </div>
+              </>
+            )}
+          </section>
         </main>
       )}
 
       {/* ====================================================================
-          ЭКРАН 5: ФИНАЛЬНАЯ СВОДКА И СПРАВОЧНЫЙ КОД C#
+          4. ФИНАЛЬНЫЙ ЭКРАН: ИТОГОВЫЙ СЧЁТ И 4 ГЛАВНЫХ ПРАВИЛА УРОКА
           ==================================================================== */}
       {state.stage === 'finale' && (
-        <main className="arena-finale-wrap">
-          <section className="arena-podium-card">
+        <main className="arena-workspace">
+          <section className="arena-step-panel">
             <div>
-              <div className="arena-eyebrow">ИТОГОВЫЙ ПРОТОКОЛ ЗАНЯТИЯ</div>
-              <h2 style={{ margin: '4px 0 6px', fontSize: '22px' }}>
-                Результаты команд по 4 раундам
-              </h2>
-              <p style={{ margin: 0, fontSize: '13px', color: 'var(--arena-text-muted)' }}>
-                Сумма баллов складывается из точности технических ходов в коде и
-                индивидуальных ответов участников на контрольных блиц-опросах.
-              </p>
-            </div>
-
-            <div className="arena-podium-scores">
+              <div className="arena-step-progress">Итоги урока</div>
+              <h2 className="arena-step-heading">Финальный счёт команд</h2>
               <div
-                className={`arena-podium-team ${
-                  state.alphaScore >= state.betaScore ? 'winner' : ''
-                }`}
+                className="arena-start-rounds"
+                style={{ marginTop: '16px', marginBottom: '20px' }}
               >
-                <div
-                  style={{
-                    fontFamily: 'var(--arena-font-mono)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                  }}
-                >
-                  КОМАНДА АЛЬФА
+                <div className="arena-start-round-item">
+                  <span className="arena-start-round-meta">Команда Альфа</span>
+                  <h3 style={{ fontSize: '36px', fontFamily: 'var(--font-mono)' }}>
+                    {state.alphaScore}
+                  </h3>
+                  <span>очков</span>
                 </div>
-                <div className="arena-podium-big-pts">{state.alphaScore}</div>
-                <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
-                  итоговых баллов
+                <div className="arena-start-round-item">
+                  <span className="arena-start-round-meta">Команда Бета</span>
+                  <h3 style={{ fontSize: '36px', fontFamily: 'var(--font-mono)' }}>
+                    {state.betaScore}
+                  </h3>
+                  <span>очков</span>
                 </div>
               </div>
 
-              <div
-                className={`arena-podium-team ${
-                  state.betaScore >= state.alphaScore ? 'winner' : ''
-                }`}
-              >
-                <div
-                  style={{
-                    fontFamily: 'var(--arena-font-mono)',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                  }}
-                >
-                  КОМАНДА БЕТА
-                </div>
-                <div className="arena-podium-big-pts">{state.betaScore}</div>
-                <div style={{ fontSize: '12px', color: 'var(--arena-text-muted)' }}>
-                  итоговых баллов
-                </div>
+              <div className="arena-choices">
+                {ARENA_ROUNDS.map((r) => (
+                  <div key={r.number} className="arena-rule-takeaway">
+                    <strong>
+                      {r.number}. {r.ruleTitle}
+                    </strong>
+                    <div style={{ marginTop: '4px', color: 'var(--text-secondary)' }}>
+                      {r.ruleSummary}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="arena-shield-rules-list">
-              {ARENA_ROUNDS.map((r) => (
-                <div key={r.number} className="arena-shield-rule-item">
-                  <div
-                    style={{
-                      fontFamily: 'var(--arena-font-mono)',
-                      fontWeight: 700,
-                      fontSize: '12px',
-                    }}
-                  >
-                    0{r.number} // {r.ruleTitle}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: 'var(--arena-text-muted)',
-                      marginTop: '3px',
-                    }}
-                  >
-                    {r.ruleSummary}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="arena-actions-row">
               <button
                 type="button"
-                className="arena-secondary-btn"
+                className="arena-back-btn"
                 onClick={() => window.print()}
               >
-                Печать памятки урока (PDF)
+                Распечатать памятку
               </button>
               <button
                 type="button"
-                className="arena-primary-cta"
-                style={{ flex: 1 }}
-                onClick={() => dispatch({ type: 'START_GAME' })}
+                className="arena-main-btn"
+                onClick={() => {
+                  setTurnStep('attack_turn');
+                  dispatch({ type: 'START_GAME' });
+                }}
               >
-                Начать новую серию с Раунда 01
+                Начать заново с Раунда 1
               </button>
             </div>
           </section>
 
-          <section className="arena-shield-card">
-            <div>
-              <div className="arena-eyebrow">СПРАВОЧНЫЙ ШАБЛОН C# (.NET 8)</div>
-              <h2 style={{ margin: '4px 0 6px', fontSize: '20px' }}>
-                Архитектура защищённого метода C#
-              </h2>
-              <p style={{ margin: 0, fontSize: '13px', color: 'var(--arena-text-muted)' }}>
-                Сводный образец кода, объединяющий правила всех четырёх раундов:
-                специфичные фильтры <code>catch</code>, порядок иерархии типов,
-                гарантированный блок <code>finally</code> и проброс через{' '}
-                <code>throw;</code>.
-              </p>
+          <section className="arena-code-panel">
+            <div className="arena-code-header">
+              <span className="arena-code-title">
+                Образец защищённого метода C#
+              </span>
+              <span className="arena-code-subtitle">
+                Объединяет все 4 правила, разобранные за занятие
+              </span>
             </div>
-
-            <div
-              className="arena-ide-window"
-              style={{
-                flex: 1,
-                border: '1px solid var(--arena-border)',
-                borderRadius: '3px',
-                background: 'var(--arena-code-bg)',
-              }}
-            >
-              <div className="arena-ide-header">
-                <div className="arena-ide-file">
-                  <span className="arena-ide-tab-indicator" />
-                  <span>ReferenceShield.cs — Образец защищённого метода</span>
+            <div className="arena-code-lines">
+              {[
+                'public decimal SafeProcessOrder(DbConnection db, string rawPrice, int count)',
+                '{',
+                '    db.Open();',
+                '    try',
+                '    {',
+                '        decimal total = decimal.Parse(rawPrice);',
+                '        return total / count;',
+                '    }',
+                '    catch (FormatException ex) // 1. Сначала узкие типы ошибок',
+                '    {',
+                '        auditLog.Write(ex.Message);',
+                '        return 0m;',
+                '    }',
+                '    catch (DivideByZeroException ex)',
+                '    {',
+                '        auditLog.Write(ex.Message);',
+                '        return 0m;',
+                '    }',
+                '    catch (Exception ex) // 2. Общий Exception — строго в конце',
+                '    {',
+                '        auditLog.Write(ex.Message);',
+                '        throw; // 3. Пустой throw; сохраняет историю строк (StackTrace)',
+                '    }',
+                '    finally // 4. Выполняется всегда (даже после return и ошибок)',
+                '    {',
+                '        db.Close();',
+                '    }',
+                '}',
+              ].map((codeLine, idx) => (
+                <div key={idx} className="arena-line">
+                  <span className="arena-line-ptr" />
+                  <span className="arena-line-number">{idx + 1}</span>
+                  <span className="arena-line-code">
+                    <CSharpLineSyntax code={codeLine} />
+                  </span>
                 </div>
-              </div>
-              <div className="arena-ide-body">
-                {[
-                  'public decimal SafeProcessOrder(DbConnection db, string rawPrice, int count)',
-                  '{',
-                  '    db.Open();',
-                  '    try',
-                  '    {',
-                  '        // 1. Защищаем потенциально опасные операции парсинга и деления',
-                  '        decimal total = decimal.Parse(rawPrice);',
-                  '        return total / count;',
-                  '    }',
-                  '    catch (FormatException ex) // 2. Сначала узкие специализированные типы',
-                  '    {',
-                  '        auditLog.Write("Ошибка формата цены: " + ex.Message);',
-                  '        return 0m;',
-                  '    }',
-                  '    catch (DivideByZeroException ex)',
-                  '    {',
-                  '        auditLog.Write("Деление на ноль: " + ex.Message);',
-                  '        return 0m;',
-                  '    }',
-                  '    catch (Exception ex) // 3. Базовый Exception располагается строго в конце',
-                  '    {',
-                  '        auditLog.Write("Непредвиденный сбой: " + ex.Message);',
-                  '        throw; // 4. Пустой throw; сохраняет исходный StackTrace',
-                  '    }',
-                  '    finally // 5. Гарантированно выполняется при return и при исключениях',
-                  '    {',
-                  '        db.Close();',
-                  '    }',
-                  '}',
-                ].map((codeLine, idx) => (
-                  <div key={idx} className="arena-code-line">
-                    <span className="arena-gutter-marker" />
-                    <span className="arena-line-num">{idx + 1}</span>
-                    <span className="arena-line-text">
-                      <CSharpLineSyntax code={codeLine} />
-                    </span>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           </section>
         </main>
