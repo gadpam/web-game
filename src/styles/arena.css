@@ -354,10 +354,23 @@ body {
   grid-template-columns: 24px 30px 1fr auto;
   align-items: center;
   gap: 10px;
-  padding: 4px 14px 4px 8px;
+  padding: 5px 14px 5px 8px;
   border-radius: 6px;
   border-left: 3px solid transparent;
-  transition: background 0.12s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.arena-line.clickable-line {
+  cursor: pointer;
+}
+
+.arena-line.clickable-line:hover {
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.arena-line.attack-targeted {
+  background: var(--accent-attack-soft);
+  border-left-color: var(--accent-attack);
 }
 
 .arena-line.diff-added {
@@ -435,9 +448,51 @@ body {
   border: 1px solid var(--border-focus);
 }
 
+.arena-line-tag.tag-attack {
+  background: var(--accent-attack-soft);
+  color: var(--accent-attack);
+  border: 1px solid var(--accent-attack);
+}
+
 .arena-line-tag.tag-skip {
   background: var(--accent-danger-soft);
   color: var(--accent-danger);
+}
+
+.arena-inline-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.arena-mini-pill {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.arena-mini-pill:hover {
+  color: var(--text-main);
+  border-color: var(--border-focus);
+}
+
+.arena-mini-pill.active-atk {
+  background: var(--accent-attack-soft);
+  color: var(--accent-attack);
+  border-color: var(--accent-attack);
+}
+
+.arena-mini-pill.active-def {
+  background: var(--accent-defense-soft);
+  color: var(--accent-defense);
+  border-color: var(--accent-defense);
 }
 
 /* Небольшая спокойная строка статуса внизу окна кода (только когда запущена проверка) */

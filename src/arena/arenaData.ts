@@ -118,7 +118,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
   // ==========================================================================
   {
     number: 1,
-    title: 'Раунд 1 · Точный прицел',
+    title: 'Точный прицел',
     subtitle: 'У каждого падения в C# есть свой тип исключения и строка-адрес',
     maxPoints: 100,
     ruleTitle: 'Правило №1: Прицельный catch (Тип)',
@@ -202,8 +202,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D1',
         codeLabel: 'З-1',
-        title: 'Двойной прицельный щит: FormatException + DivideByZeroException',
-        shortDesc: 'Прикрывает и строку парсинга (стр. 3), и деление на 0 (стр. 4)',
+        title: 'Два блока: catch (FormatException) и catch (DivideByZeroException)',
+        shortDesc: 'Отдельный обработчик для каждого типа исключения',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
@@ -238,8 +238,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D2',
         codeLabel: 'З-2',
-        title: 'Одиночный щит: только catch (FormatException)',
-        shortDesc: 'Ловит неверный формат строки, но пропускает деление на 0',
+        title: 'Один блок: catch (FormatException)',
+        shortDesc: 'Перехват ошибок преобразования строки в число',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
@@ -267,8 +267,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D3',
         codeLabel: 'З-3',
-        title: 'Одиночный щит: только catch (DivideByZeroException)',
-        shortDesc: 'Ловит деление на 0, но падает на текстовом вводе "два"',
+        title: 'Один блок: catch (DivideByZeroException)',
+        shortDesc: 'Перехват ошибок целочисленного деления',
         targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
@@ -296,8 +296,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D4',
         codeLabel: 'З-4',
-        title: 'Слепой перехват: один общий catch (Exception)',
-        shortDesc: 'Ловит всё подряд без разбора причины (Штраф -50% за слепой перехват!)',
+        title: 'Один общий блок: catch (Exception)',
+        shortDesc: 'Универсальный перехват базового типа Exception без уточнения причины',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int BuyTickets(string countText, int groupSize)', roleTag: 'body' },
@@ -309,7 +309,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 8,
-            code: '  catch (Exception) { return 0; } // Какая именно ошибка — неизвестно!',
+            code: '  catch (Exception) { return 0; }',
             isAddedPatch: true,
             roleTag: 'catch_general',
             catchesTypes: ['FormatException', 'DivideByZeroException'],
@@ -358,7 +358,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
   // ==========================================================================
   {
     number: 2,
-    title: 'Раунд 2 · Ловушка порядка (CS0160)',
+    title: 'Порядок блоков catch',
     subtitle: 'Почему в C# нельзя ставить общий catch (Exception) выше частных типов',
     maxPoints: 150,
     ruleTitle: 'Правило №2: От частного к общему (Без CS0160)',
@@ -419,7 +419,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         id: 'A2',
         codeLabel: 'А-2',
         targetLine: 4,
-        payloadCode: 'promo = "SALE", idx = 99 (при 3 элементах)',
+        payloadCode: 'promo = "SALE", idx = 99',
         expectedException: 'IndexOutOfRangeException',
         shortDesc: 'Индекс 99 за пределами массива взорвёт table[idx] на строке 4',
         throwsException: 'IndexOutOfRangeException',
@@ -442,8 +442,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D1',
         codeLabel: 'З-1',
-        title: 'Верный порядок: частные типы сверху → общий Exception внизу',
-        shortDesc: '1) NullReferenceException → 2) IndexOutOfRangeException → 3) Exception',
+        title: 'NullReferenceException -> IndexOutOfRangeException -> Exception',
+        shortDesc: 'Сначала узкие типы исключений, общий Exception в конце',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
@@ -485,8 +485,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D2',
         codeLabel: 'З-2',
-        title: 'Инверсия: catch (Exception) поставлен ПЕРВЫМ (Ловушка CS0160!)',
-        shortDesc: 'Сначала общий Exception, а под ним — частные типы',
+        title: 'Exception -> NullReferenceException -> IndexOutOfRangeException',
+        shortDesc: 'Общий блок Exception сверху, узкие типы под ним',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
@@ -498,14 +498,14 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 8,
-            code: '  catch (Exception ex) { return 0; } // Перекрывает все ветки ниже!',
+            code: '  catch (Exception ex) { return 0; }',
             isAddedPatch: true,
             roleTag: 'catch_general',
             catchesTypes: ['Exception'],
           },
           {
             lineNumber: 9,
-            code: '  catch (NullReferenceException ex) { return 0; } // Ошибка компиляции CS0160: блок недостижим',
+            code: '  catch (NullReferenceException ex) { return 0; }',
             isAddedPatch: true,
             roleTag: 'catch_specific',
             catchesTypes: ['NullReferenceException'],
@@ -527,8 +527,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D3',
         codeLabel: 'З-3',
-        title: 'Неполный щит: только catch (NullReferenceException)',
-        shortDesc: 'Защищает от null на строке 3, но не ловит выход за границы массива',
+        title: 'Только catch (NullReferenceException)',
+        shortDesc: 'Проверка только на пустую ссылку (null)',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
@@ -556,8 +556,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D4',
         codeLabel: 'З-4',
-        title: 'Неполный щит: только catch (IndexOutOfRangeException)',
-        shortDesc: 'Защищает массив на строке 4, но падает при promo = null',
+        title: 'Только catch (IndexOutOfRangeException)',
+        shortDesc: 'Проверка только на выход индекса за пределы массива',
         targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'int GetDiscount(string promo, int[] table, int idx)', roleTag: 'body' },
@@ -617,7 +617,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
   // ==========================================================================
   {
     number: 3,
-    title: 'Раунд 3 · Зависший замок (finally)',
+    title: 'Освобождение ресурсов',
     subtitle: 'Как закрыть соединение с БД, если внутри метода есть и return, и падение',
     maxPoints: 200,
     ruleTitle: 'Правило №3: Гарантия блока finally',
@@ -677,7 +677,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         id: 'A1',
         codeLabel: 'А-1',
         targetLine: 4,
-        payloadCode: 'amount = -50, split = 2 (Ранний return)',
+        payloadCode: 'amount = -50, split = 2',
         expectedException: 'Утечка БД при return',
         shortDesc: 'Отрицательная сумма вызовет return false на строке 4 в обход db.Close()!',
         throwsException: null,
@@ -689,7 +689,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         id: 'A2',
         codeLabel: 'А-2',
         targetLine: 5,
-        payloadCode: 'amount = 100, split = 0 (Взрыв деления)',
+        payloadCode: 'amount = 100, split = 0',
         expectedException: 'DivideByZeroException',
         shortDesc: 'Деление на split = 0 взорвёт строку 5 и перепрыгнет db.Close()!',
         throwsException: 'DivideByZeroException',
@@ -700,7 +700,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         id: 'A3',
         codeLabel: 'А-3',
         targetLine: 5,
-        payloadCode: 'amount = 500, split = 0 (Двойной тест БД)',
+        payloadCode: 'amount = 500, split = 0',
         expectedException: 'DivideByZeroException',
         shortDesc: 'Проверяет одновременно перехват деления на 0 и закрытие БД в finally',
         throwsException: 'DivideByZeroException',
@@ -712,8 +712,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D1',
         codeLabel: 'З-1',
-        title: 'Эталон: catch (DivideByZeroException) + finally { db.Close(); }',
-        shortDesc: 'Гарантированно закрывает БД и при падении на строке 5, и при return на строке 4',
+        title: 'Блок try-catch + секция finally { db.Close(); }',
+        shortDesc: 'Вызов db.Close() вынесен в отдельный блок finally',
         targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
@@ -733,7 +733,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           },
           {
             lineNumber: 10,
-            code: '  finally { db.Close(); } // Гарантированное освобождение ресурса',
+            code: '  finally { db.Close(); }',
             isAddedPatch: true,
             roleTag: 'finally',
           },
@@ -748,8 +748,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D2',
         codeLabel: 'З-2',
-        title: 'Ловушка №1: оставить db.Close() в конце блока try (без finally)',
-        shortDesc: 'При любом return или исключении строка db.Close() будет перепрыгнута!',
+        title: 'Вызов db.Close() внутри блока try (перед return true)',
+        shortDesc: 'Закрытие соединения в последней строке блока try',
         targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
@@ -758,7 +758,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
           { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
-          { lineNumber: 7, code: '    db.Close(); // Не выполнится при раннем return или исключении', roleTag: 'body' },
+          { lineNumber: 7, code: '    db.Close();', roleTag: 'body' },
           { lineNumber: 8, code: '    return true;', roleTag: 'body' },
           { lineNumber: 9, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
@@ -779,15 +779,15 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D3',
         codeLabel: 'З-3',
-        title: 'Ловушка №2: поставить db.Close() ПОСЛЕ блока try-catch (без finally)',
-        shortDesc: 'Кажется, что сработает, но ранний return внутри try выйдет из метода мимо неё!',
+        title: 'Вызов db.Close() после блока try-catch (в конце метода)',
+        shortDesc: 'Закрытие соединения обычной строкой после try-catch',
         targetLine: 4,
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
           { lineNumber: 2, code: '{', roleTag: 'body' },
           { lineNumber: 3, code: '  db.Open(); // Соединение открыто', roleTag: 'body' },
           { lineNumber: 4, code: '  try {', isAddedPatch: true, roleTag: 'try' },
-          { lineNumber: 5, code: '    if (amount <= 0) return false; // Выход мимо стр. 10!', roleTag: 'body' },
+          { lineNumber: 5, code: '    if (amount <= 0) return false;', roleTag: 'body' },
           { lineNumber: 6, code: '    int part = amount / split;', roleTag: 'body' },
           { lineNumber: 7, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
@@ -799,7 +799,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           },
           {
             lineNumber: 9,
-            code: '  db.Close(); // Не выполнится при раннем выходе из метода',
+            code: '  db.Close();',
             isAddedPatch: true,
             roleTag: 'after',
           },
@@ -815,8 +815,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D4',
         codeLabel: 'З-4',
-        title: 'Ловушка №3: поместить db.Close() только внутрь catch',
-        shortDesc: 'При исключении БД закроется, но при обычной работе и return останется висеть!',
+        title: 'Вызов db.Close() внутри блока catch',
+        shortDesc: 'Закрытие соединения только при перехвате ошибки',
         targetLine: 5,
         patchedLines: [
           { lineNumber: 1, code: 'bool TransferCoins(Database db, int amount, int split)', roleTag: 'body' },
@@ -877,7 +877,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
   // ==========================================================================
   {
     number: 4,
-    title: 'Раунд 4 · Слепая зона (Лог и StackTrace)',
+    title: 'Журнал ошибок и проброс throw',
     subtitle: 'Почему пустой catch {} опаснее падения, а throw ex; уничтожает улики',
     maxPoints: 300,
     ruleTitle: 'Правило №4: Запиши ex.Message и сохрани стек через throw;',
@@ -922,7 +922,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         id: 'A1',
         codeLabel: 'А-1',
         targetLine: 3,
-        payloadCode: 'pinInput = "HACK_77" (Аудит лога и StackTrace)',
+        payloadCode: 'pinInput = "HACK_77"',
         expectedException: 'FormatException',
         shortDesc: 'Проверяет, записан ли сбой в AuditLog и сохранился ли адрес строки в стеке',
         throwsException: 'FormatException',
@@ -933,7 +933,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         id: 'A2',
         codeLabel: 'А-2',
         targetLine: 3,
-        payloadCode: 'pinInput = "" (Проверка на проглатывание ошибки)',
+        payloadCode: 'pinInput = ""',
         expectedException: 'FormatException',
         shortDesc: 'Пустой ввод: если у Защиты пустой catch {}, атака пройдёт незамеченной!',
         throwsException: 'FormatException',
@@ -944,7 +944,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
         id: 'A3',
         codeLabel: 'А-3',
         targetLine: 3,
-        payloadCode: 'pinInput = "999999999999999" (Переполнение int)',
+        payloadCode: 'pinInput = "999999999999999"',
         expectedException: 'OverflowException',
         shortDesc: 'Слишком большое число для int вызывает OverflowException на строке 3',
         throwsException: 'OverflowException',
@@ -956,8 +956,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D1',
         codeLabel: 'З-1',
-        title: 'Честный аудит: log.Write(ex.Message) + чистый throw;',
-        shortDesc: 'Записывает детали сбоя в журнал и сохраняет исходную строку падения в StackTrace',
+        title: 'catch (Exception ex) { log.Write(ex.Message); throw; }',
+        shortDesc: 'Запись сообщения в лог и проброс инструкцией throw;',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int AuthorizeCard(string pinInput, AuditLog log)', roleTag: 'body' },
@@ -968,7 +968,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 7,
-            code: '  catch (Exception ex) { log.Write(ex.Message); throw; } // Стек вызовов сохранён (rethrow)',
+            code: '  catch (Exception ex) { log.Write(ex.Message); throw; }',
             isAddedPatch: true,
             roleTag: 'catch_specific',
             catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
@@ -986,8 +986,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D2',
         codeLabel: 'З-2',
-        title: 'Ловушка CA2200: log.Write(ex.Message) + throw ex;',
-        shortDesc: 'Записывает лог, но throw ex; затирает исходную строку падения в StackTrace!',
+        title: 'catch (Exception ex) { log.Write(ex.Message); throw ex; }',
+        shortDesc: 'Запись сообщения в лог и повторный выброс переменной throw ex;',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int AuthorizeCard(string pinInput, AuditLog log)', roleTag: 'body' },
@@ -998,7 +998,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 7,
-            code: '  catch (Exception ex) { log.Write(ex.Message); throw ex; } // Антипаттерн CA2200: сброс StackTrace',
+            code: '  catch (Exception ex) { log.Write(ex.Message); throw ex; }',
             isAddedPatch: true,
             roleTag: 'catch_specific',
             catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
@@ -1016,8 +1016,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D3',
         codeLabel: 'З-3',
-        title: 'Ловушка «Молчание»: пустой catch { return 0; }',
-        shortDesc: 'Программа не падает, но ошибка бесследно исчезает из журнала безопасности!',
+        title: 'catch { return 0; }',
+        shortDesc: 'Перехват без параметров и возврат значения по умолчанию',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int AuthorizeCard(string pinInput, AuditLog log)', roleTag: 'body' },
@@ -1028,7 +1028,7 @@ export const ARENA_ROUNDS: RoundSpec[] = [
           { lineNumber: 6, code: '  }', isAddedPatch: true, roleTag: 'try' },
           {
             lineNumber: 7,
-            code: '  catch { return 0; } // Антипаттерн: пустой catch скрывает сбой',
+            code: '  catch { return 0; }',
             isAddedPatch: true,
             roleTag: 'catch_general',
             catchesTypes: ['FormatException', 'OverflowException', 'Exception'],
@@ -1046,8 +1046,8 @@ export const ARENA_ROUNDS: RoundSpec[] = [
       {
         id: 'D4',
         codeLabel: 'З-4',
-        title: 'Узкий перехват: только catch (FormatException) без OverflowException',
-        shortDesc: 'Защитит от букв, но пропустит переполнение числа "999999999999999"',
+        title: 'catch (FormatException ex) { log.Write(ex.Message); throw; }',
+        shortDesc: 'Перехват только типа FormatException с записью в лог',
         targetLine: 3,
         patchedLines: [
           { lineNumber: 1, code: 'int AuthorizeCard(string pinInput, AuditLog log)', roleTag: 'body' },
